@@ -68,4 +68,22 @@ int main() {
     apiManager.executeTile("learned_cmd_42");
     apiManager.scanSystem();
     return 0;
+}#include "CoreSystem.h"
+#include "APIModule.h"
+#include "HeadAPIModule.h"
+
+int main() {
+    CoreSystem core;
+    HeadAPIModule headApi(&core);
+
+    // Example: Core sends message to Head API
+    headApi.receiveFromCore("Start system diagnostics");
+
+    // Example: Head API dispatches tasks to API Modules
+    headApi.dispatchTaskToAPI(2, "Analyze network traffic");
+    headApi.dispatchTaskToAPI(4, "Perform memory check");
+
+    // ... expand as needed
+
+    return 0;
 }
