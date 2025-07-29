@@ -1,1 +1,16 @@
 core files
+[Cloud Database]
+      ^
+      |  (sync/learned libraries, compressed tiles)
+      v
+[API Module Manager]
+      |
+      +-- [Tile Loader/Decompressor]   <-- Compressed files: [commands], [tasks], [events]
+      |        |
+      |        +-- [Tiled Command/Event/Task Objects]
+      |
+      +-- [ML/Logistics Engine]        <-- Verification/optimization layer
+      |
+      +-- [Dynamic Language Integrator] <-- Updates/expands tile library via cloud sync
+      |
+      +-- [System Scanner/Monitor]     <-- Ensures speed, detects anomalies
