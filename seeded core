@@ -87,3 +87,140 @@ int main() {
 
     return 0;
 }
+import datetime
+import random
+import json
+{
+    "timestamp": "2025-07-29T20:00:00.123456",
+    "api_behaviors": {
+        "API_Module_1": {
+            "average_latency": 102.3,
+            "average_success_rate": 0.95,
+            "average_resource_usage": 75.4
+        },
+        "API_Module_2": {
+            "average_latency": 87.6,
+            "average_success_rate": 0.97,
+            "average_resource_usage": 80.2
+        },
+        ...
+    }
+}
+
+
+class DiagnosticSystem:
+    """
+    Diagnostic system that analyzes API performance and tiles specific situations.
+    """
+    def __init__(self):
+        self.api_metrics = {}
+        self.tiles = {}
+        self.core_diagnostics = []
+
+    def collect_data_stream(self, api_name, execution_data):
+        """
+        Collects data stream information from an API.
+        """
+        # Simulate diagnostic metrics
+        latency = random.uniform(10, 200)  # Simulated latency in ms
+        success_rate = random.uniform(0.9, 1.0)  # Simulated success rate (90%-100%)
+        resource_usage = random.uniform(50, 100)  # Simulated resource usage in %
+
+        # Store collected metrics
+        if api_name not in self.api_metrics:
+            self.api_metrics[api_name] = []
+        self.api_metrics[api_name].append({
+            "timestamp": datetime.datetime.utcnow().isoformat(),
+            "task": execution_data["task"],
+            "latency": latency,
+            "success_rate": success_rate,
+            "resource_usage": resource_usage
+        })
+
+    def analyze_behavior(self):
+        """
+        Analyzes API data streams and generates overall behavior diagnostics.
+        """
+        overall_diagnostics = {
+            "timestamp": datetime.datetime.utcnow().isoformat(),
+            "api_behaviors": {}
+        }
+
+        for api_name, metrics in self.api_metrics.items():
+            # Calculate average metrics
+            avg_latency = sum(m["latency"] for m in metrics) / len(metrics)
+            avg_success_rate = sum(m["success_rate"] for m in metrics) / len(metrics)
+            avg_resource_usage = sum(m["resource_usage"] for m in metrics) / len(metrics)
+
+            # Log behavior diagnostics
+            overall_diagnostics["api_behaviors"][api_name] = {
+                "average_latency": avg_latency,
+                "average_success_rate": avg_success_rate,
+                "average_resource_usage": avg_resource_usage
+            }
+
+        # Add to core diagnostics
+        self.core_diagnostics.append(overall_diagnostics)
+        return overall_diagnostics
+
+    def tile_situation(self, api_name, situation_data):
+        """
+        Tiles a specific situation as a reusable fix template.
+        """
+        tile_id = f"{api_name}_{len(self.tiles) + 1}"
+        self.tiles[tile_id] = situation_data
+
+    def handle_error(self, api_name, error_data):
+        """
+        Handles an error and tiles the situation for future use.
+        """
+        # Log the error situation as a tile
+        self.tile_situation(api_name, {
+            "error": error_data,
+            "timestamp": datetime.datetime.utcnow().isoformat(),
+            "fix_suggestion": "Apply previous behavior from tiled situations."
+        })
+
+    def send_to_core(self):
+        """
+        Sends diagnostics to the core for archiving and future use.
+        """
+        with open("core_diagnostics.json", "w") as core_file:
+            json.dump(self.core_diagnostics, core_file, indent=4)
+
+        with open("tiles.json", "w") as tiles_file:
+            json.dump(self.tiles, tiles_file, indent=4)
+
+
+# Example Usage
+if __name__ == "__main__":
+    diagnostic_system = DiagnosticSystem()
+
+    # Simulate data streams from APIs
+    apis = ["API_Module_1", "API_Module_2", "API_Module_3", "API_Module_4", "API_Module_5"]
+    tasks = ["Task_A", "Task_B", "Task_C", "Task_D", "Task_E"]
+
+    for api, task in zip(apis, tasks):
+        diagnostic_system.collect_data_stream(api, {"task": task})
+
+    # Analyze system behavior
+    overall_behavior = diagnostic_system.analyze_behavior()
+    print("Overall Behavior Diagnostics:")
+    print(json.dumps(overall_behavior, indent=4))
+
+    # Simulate an error and tile it
+    diagnostic_system.handle_error("API_Module_1", {"error_code": 500, "message": "Database timeout"})
+
+    # Send diagnostics and tiles to the core
+    diagnostic_system.send_to_core()
+    print("Diagnostics and tiles sent to core.")
+{
+    "API_Module_1_1": {
+        "error": {
+            "error_code": 500,
+            "message": "Database timeout"
+        },
+        "timestamp": "2025-07-29T20:00:30.987654",
+        "fix_suggestion": "Apply previous behavior from tiled situations."
+    }
+}
