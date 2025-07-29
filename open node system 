@@ -1,1 +1,102 @@
 this system is a open node connection that enables dynamic logistics and upholds secure data transfer to and from API to API. it at its core is a linear file manager that updated code given down from the core passes in a message to all systems pathways with specific tile in code extraction to complete a task or event. with parental control down the branch It also works as a processing system lauchpad enabling enhanced system updates that gain more advanced to be uploaded without overload
+import os
+import datetime
+
+class CoreAdministration:
+    """
+    Core Administration class to enforce parental rights and validate edits/creations.
+    """
+    def __init__(self):
+        self.log_file = "core_log.txt"
+        self.parental_rights_enabled = True
+
+    def log_action(self, action_type, user, filename, status):
+        """
+        Logs all actions (read, edit, create) for auditing.
+        """
+        timestamp = datetime.datetime.utcnow().isoformat()
+        log_entry = f"{timestamp} | {action_type} | User: {user} | File: {filename} | Status: {status}\n"
+        with open(self.log_file, "a") as log:
+            log.write(log_entry)
+
+    def validate_action(self, action_type, user, filename):
+        """
+        Validates whether the user is allowed to perform the action.
+        """
+        if not self.parental_rights_enabled:
+            return True  # If parental rights are disabled, allow all actions.
+        # Example logic: Only admin users can edit/create
+        if user != "admin":
+            self.log_action(action_type, user, filename, "DENIED")
+            raise PermissionError(f"User '{user}' is not authorized to perform '{action_type}' on '{filename}'.")
+        self.log_action(action_type, user, filename, "APPROVED")
+        return True
+
+
+class NodeSystem:
+    """
+    Node system with read-only permissions and controlled edits/creations under core administration.
+    """
+    def __init__(self, core_admin):
+        self.core_admin = core_admin
+
+    def read_file(self, filename, user="guest"):
+        """
+        Allows reading a file with no restrictions.
+        """
+        try:
+            with open(filename, "r") as file:
+                data = file.read()
+            self.core_admin.log_action("READ", user, filename, "SUCCESS")
+            return data
+        except FileNotFoundError:
+            self.core_admin.log_action("READ", user, filename, "FAILED: File not found")
+            raise
+
+    def edit_file(self, filename, content, user="guest"):
+        """
+        Allows editing a file, but only with validation from Core Administration.
+        """
+        try:
+            self.core_admin.validate_action("EDIT", user, filename)
+            with open(filename, "w") as file:
+                file.write(content)
+            self.core_admin.log_action("EDIT", user, filename, "SUCCESS")
+        except PermissionError as e:
+            print(e)
+
+    def create_file(self, filename, content, user="guest"):
+        """
+        Allows creating a file, but only with validation from Core Administration.
+        """
+        try:
+            self.core_admin.validate_action("CREATE", user, filename)
+            with open(filename, "w") as file:
+                file.write(content)
+            self.core_admin.log_action("CREATE", user, filename, "SUCCESS")
+        except PermissionError as e:
+            print(e)
+
+
+# Example usage
+if __name__ == "__main__":
+    # Initialize Core Administration
+    core_admin = CoreAdministration()
+
+    # Initialize Node System with parental rights under core administration
+    node_system = NodeSystem(core_admin)
+
+    # Example user interactions
+    user = "guest"  # Change to "admin" for administrative access
+
+    # Attempt to read a file (allowed for all users)
+    try:
+        print(node_system.read_file("example.txt", user=user))
+    except FileNotFoundError:
+        print("File not found.")
+
+    # Attempt to edit a file (requires admin access)
+    node_system.edit_file("example.txt", "New content", user=user)
+
+    # Attempt to create a file (requires admin access)
+    node_system.create_file("new_file.txt", "This is a new file.", user=user)
