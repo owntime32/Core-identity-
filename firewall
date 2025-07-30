@@ -1,0 +1,1 @@
+this is a firewall system that blocks all unknown communications. only approved user and trusted clouds are giving permission to network. it places a secondary fixed firewall over critical system files that only superuser or trusted cloud can be given access to even read
