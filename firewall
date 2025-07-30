@@ -1,1 +1,27 @@
 this is a firewall system that blocks all unknown communications. only approved user and trusted clouds are giving permission to network. it places a secondary fixed firewall over critical system files that only superuser or trusted cloud can be given access to even read
+import datetime
+import hashlib
+import requests
+from typing import Dict, List
+
+
+class EnhancedFirewall:
+    """
+    Enhanced Firewall System for threat assessment, reverse tracing, and access restrictions.
+    """
+
+    def __init__(self):
+        self.threat_log = []
+        self.restricted_entities = {}
+        self.verification_codes = {}
+
+    def log_attempt(self, ip_address: str, website: str, details: Dict):
+        """
+        Logs a communication attempt and performs threat level assessment.
+        """
+        timestamp = datetime.datetime.utcnow().isoformat()
+        threat_score = self.assess_threat(details)
+
+        log_entry = {
+            "timestamp": timestamp,
+            "
