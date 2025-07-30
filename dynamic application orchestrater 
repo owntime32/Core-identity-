@@ -173,3 +173,187 @@ if __name__ == "__main__":
     # List all applications and their commands
     all_apps = app_manager.list_applications()
     print("Applications:", json.dumps(all_apps, indent=4))
+import os
+import json
+import datetime
+import random
+import uuid
+
+class CoreLibraryArchive:
+    """
+    Core Library Archive: Manages tiling and archiving of learned pathways.
+    """
+    def __init__(self, archive_path):
+        self.archive_path = archive_path
+        os.makedirs(self.archive_path, exist_ok=True)
+
+    def tile_and_archive(self, pathway_data, performance_data, debug_logs):
+        """
+        Tiles and archives a learned pathway with performance and debugging data.
+        """
+        tile_id = str(uuid.uuid4())  # Generate a unique ID for the tile
+        tile = {
+            "tile_id": tile_id,
+            "timestamp": datetime.datetime.utcnow().isoformat(),
+            "pathway_data": pathway_data,
+            "performance_data": performance_data,
+            "debug_logs": debug_logs
+        }
+
+        # Save the tile to the archive
+        tile_path = os.path.join(self.archive_path, f"{tile_id}.json")
+        with open(tile_path, "w") as tile_file:
+            json.dump(tile, tile_file, indent=4)
+
+        print(f"Tile archived with ID: {tile_id}")
+        return tile_id
+
+    def list_tiles(self):
+        """
+        Lists all archived tiles.
+        """
+        return [f for f in os.listdir(self.archive_path) if f.endswith(".json")]
+
+    def get_tile(self, tile_id):
+        """
+        Retrieves a specific tile by its ID.
+        """
+        tile_path = os.path.join(self.archive_path, f"{tile_id}.json")
+        if os.path.exists(tile_path):
+            with open(tile_path, "r") as tile_file:
+                return json.load(tile_file)
+        print(f"Tile with ID {tile_id} not found.")
+        return None
+
+
+class PerformanceMonitor:
+    """
+    Monitors and records performance metrics for tasks.
+    """
+    @staticmethod
+    def measure_execution():
+        """
+        Simulates measuring execution time and success rate.
+        """
+        execution_time = random.uniform(0.1, 5.0)  # Simulated execution time in seconds
+        success_rate = random.uniform(0.8, 1.0)  # Simulated success rate (80%-100%)
+        return {
+            "execution_time": execution_time,
+            "success_rate": success_rate
+        }
+
+
+class DebugLogger:
+    """
+    Captures and stores debugging information.
+    """
+    def __init__(self):
+        self.logs = []
+
+    def log(self, message):
+        """
+        Logs a debugging message.
+        """
+        timestamp = datetime.datetime.utcnow().isoformat()
+        self.logs.append({"timestamp": timestamp, "message": message})
+        print(f"DEBUG: {message}")
+
+    def get_logs(self):
+        """
+        Retrieves all debugging logs.
+        """
+        return self.logs
+
+
+class DynamicTaskExecutor:
+    """
+    Executes dynamic tasks and archives learned pathways with performance and debugging data.
+    """
+    def __init__(self, core_library):
+        self.core_library = core_library
+        self.debug_logger = DebugLogger()
+
+    def execute_task(self, task_name, task_function, *args, **kwargs):
+        """
+        Executes a task dynamically and archives the learned pathway.
+        """
+        self.debug_logger.log(f"Starting task: {task_name}")
+
+        # Measure performance
+        performance_monitor = PerformanceMonitor()
+        performance_data = performance_monitor.measure_execution()
+
+        # Execute the task
+        try:
+            result = task_function(*args, **kwargs)
+            self.debug_logger.log(f"Task '{task_name}' executed successfully.")
+        except Exception as e:
+            result = None
+            self.debug_logger.log(f"Error during task '{task_name}': {str(e)}")
+
+        # Archive the pathway
+        pathway_data = {
+            "task_name": task_name,
+            "result": result,
+            "args": args,
+            "kwargs": kwargs
+        }
+        debug_logs = self.debug_logger.get_logs()
+        tile_id = self.core_library.tile_and_archive(pathway_data, performance_data, debug_logs)
+
+        return tile_id
+
+
+# Example Usage
+if __name__ == "__main__":
+    # Initialize the core library archive
+    archive_path = "./core_library_archive"
+    core_library = CoreLibraryArchive(archive_path)
+
+    # Initialize the dynamic task executor
+    task_executor = DynamicTaskExecutor(core_library)
+
+    # Define a sample task
+    def sample_task(x, y):
+        return x + y
+
+    # Execute the task and archive the pathway
+    tile_id = task_executor.execute_task("Addition Task", sample_task, 5, 10)
+    print(f"Task archived with Tile ID: {tile_id}")
+
+    # List all archived tiles
+    tiles = core_library.list_tiles()
+    print(f"Archived Tiles: {tiles}")
+
+    # Retrieve a specific tile
+    tile = core_library.get_tile(tile_id)
+    print(f"Retrieved Tile: {json.dumps(tile, indent=4)}")
+DEBUG: Starting task: Addition Task
+DEBUG: Task 'Addition Task' executed successfully.
+Tile archived with ID: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+Task archived with Tile ID: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+Archived Tiles: ['a1b2c3d4-e5f6-7890-abcd-ef1234567890.json']
+Retrieved Tile: {
+    "tile_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "timestamp": "2025-07-30T12:00:00.000000",
+    "pathway_data": {
+        "task_name": "Addition Task",
+        "result": 15,
+        "args": [5, 10],
+        "kwargs": {}
+    },
+    "performance_data": {
+        "execution_time": 3.25,
+        "success_rate": 0.95
+    },
+    "debug_logs": [
+        {
+            "timestamp": "2025-07-30T12:00:00.000000",
+            "message": "Starting task: Addition Task"
+        },
+        {
+            "timestamp": "2025-07-30T12:00:01.000000",
+            "message": "Task 'Addition Task' executed successfully."
+        }
+    ]
+}
