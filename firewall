@@ -24,5 +24,137 @@ class EnhancedFirewall:
 
         log_entry = {
             "timestamp": timestamp,
+            "ip_address": ip_address,
+            "website": website,
+            "details": details,
+            "threat_score": threat_score,
+        }
+        self.threat_log.append(log_entry)
+        print(f"[LOG] Communication attempt logged: {log_entry}")
 
-            "
+        # Trigger security protocol if threat level exceeds threshold
+        if threat_score >= 7:  # Example threshold
+            self.restrict_access(ip_address, website, threat_score)
+
+    def assess_threat(self, details: Dict) -> int:
+        """
+        Dynamically assesses the threat level based on communication details.
+        """
+        base_score = 5
+
+        # Example threat assessment logic
+        if details.get("frequency", 0) > 10:
+            base_score += 3
+        if details.get("suspicious_activity", False):
+            base_score += 2
+        if details.get("failed_verifications", 0) > 3:
+            base_score += 2
+
+        return min(base_score, 10)  # Max threat score is 10
+
+    def restrict_access(self, ip_address: str, website: str, threat_score: int):
+        """
+        Restricts access to an IP address or website and requires a verification code.
+        """
+        restriction_id = hashlib.sha256((ip_address + website).encode()).hexdigest()
+
+        restriction_entry = {
+            "timestamp": datetime.datetime.utcnow().isoformat(),
+            "ip_address": ip_address,
+            "website": website,
+            "threat_score": threat_score,
+            "verification_required": True,
+        }
+
+        self.restricted_entities[restriction_id] = restriction_entry
+        print(f"[SECURITY] Access restricted for {ip_address} and {website}. Verification required.")
+
+    def issue_verification_code(self, restriction_id: str):
+        """
+        Issues a verification code for lifting restrictions.
+        """
+        if restriction_id not in self.restricted_entities:
+            print(f"[ERROR] Restriction ID {restriction_id} not found.")
+            return None
+
+        verification_code = hashlib.sha256(str(datetime.datetime.utcnow()).encode()).hexdigest()
+        self.verification_codes[restriction_id] = verification_code
+        print(f"[VERIFICATION] Code issued for restriction ID {restriction_id}: {verification_code}")
+        return verification_code
+
+    def verify_access(self, restriction_id: str, provided_code: str) -> bool:
+        """
+        Verifies access using a verification code.
+        """
+        expected_code = self.verification_codes.get(restriction_id)
+        if expected_code and provided_code == expected_code:
+            print(f"[VERIFICATION] Access verified for restriction ID {restriction_id}.")
+            del self.restricted_entities[restriction_id]
+            del self.verification_codes[restriction_id]
+            return True
+        print(f"[VERIFICATION] Verification failed for restriction ID {restriction_id}.")
+        return False
+
+    def reverse_trace(self, ip_address: str) -> Dict:
+        """
+        Performs a reverse trace on the given IP address to determine its origin.
+        """
+        try:
+            # Example implementation using a third-party IP info API
+            response = requests.get(f"https://ipinfo.io/{ip_address}/json")
+            response.raise_for_status()
+            trace_data = response.json()
+            print(f"[TRACE] Reverse trace result for {ip_address}: {trace_data}")
+            return trace_data
+        except Exception as e:
+            print(f"[TRACE] Reverse trace failed for {ip_address}: {e}")
+            return {"error": str(e)}
+
+    def generate_diagnostic_report(self) -> Dict:
+        """
+        Generates a diagnostic report for all logged communication attempts and restrictions.
+        """
+        report = {
+            "timestamp": datetime.datetime.utcnow().isoformat(),
+            "total_attempts": len(self.threat_log),
+            "restricted_count": len(self.restricted_entities),
+            "threat_log": self.threat_log,
+            "restricted_entities": self.restricted_entities,
+        }
+        print("[DIAGNOSTIC] Generating diagnostic report.")
+        return report
+
+
+# Example Usage
+if __name__ == "__main__":
+    # Initialize the Enhanced Firewall
+    firewall = EnhancedFirewall()
+
+    # Simulate communication attempts
+    firewall.log_attempt("192.168.1.1", "malicious-site.com", {
+        "frequency": 15,
+        "suspicious_activity": True,
+        "failed_verifications": 2,
+    })
+
+    firewall.log_attempt("172.16.0.2", "unknown-site.org", {
+        "frequency": 5,
+        "suspicious_activity": False,
+        "failed_verifications": 0,
+    })
+
+    # Perform reverse trace
+    firewall.reverse_trace("192.168.1.1")
+
+    # Restriction and verification
+    restriction_id = list(firewall.restricted_entities.keys())[0]
+    verification_code = firewall.issue_verification_code(restriction_id)
+    print(f"Verification Code: {verification_code}")
+
+    # Attempt to verify access
+    firewall.verify_access(restriction_id, verification_code)
+
+    # Generate diagnostic report
+    diagnostic_report = firewall.generate_diagnostic_report()
+    print("\nFinal Diagnostic Report:")
+    print(json.dumps(diagnostic_report, indent=4))
