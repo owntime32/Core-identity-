@@ -1,1 +1,180 @@
 this is a read only file stating clear un modifiable governance over system execution and integrity.
+import json
+from datetime import datetime
+
+
+class GovernanceLevel:
+    """
+    Represents a single governance level in the hierarchy.
+    """
+    def __init__(self, name, permissions):
+        self.name = name
+        self.permissions = permissions  # Permissions can be a dictionary or set of rules
+        self.entities = []  # Programs or components under this governance level
+
+    def add_entity(self, entity_name):
+        """
+        Adds an entity (program, file, etc.) under this governance level.
+        """
+        self.entities.append(entity_name)
+
+    def __repr__(self):
+        return f"GovernanceLevel(name={self.name}, entities={self.entities})"
+
+
+class HeritageLineage:
+    """
+    Manages the entire governance hierarchy.
+    """
+    def __init__(self):
+        self.lineage = []
+        self.external_files = []
+
+    def add_level(self, name, permissions):
+        """
+        Adds a new governance level to the lineage.
+        """
+        level = GovernanceLevel(name, permissions)
+        self.lineage.append(level)
+
+    def assign_entity_to_level(self, entity_name, level_name):
+        """
+        Assigns an entity to a specific governance level.
+        """
+        for level in self.lineage:
+            if level.name == level_name:
+                level.add_entity(entity_name)
+                return
+        raise ValueError(f"Governance level '{level_name}' not found.")
+
+    def handle_external_file(self, file_name):
+        """
+        Places external files at the lowest governance level.
+        """
+        self.external_files.append(file_name)
+        lowest_level = self.lineage[-1]  # Lowest governance level
+        lowest_level.add_entity(file_name)
+
+    def display_lineage(self):
+        """
+        Displays the entire governance hierarchy.
+        """
+        print("Heritage Lineage Governance List:")
+        for i, level in enumerate(self.lineage, start=1):
+            print(f"{i}. {level.name} (Permissions: {level.permissions})")
+            print(f"   Entities: {', '.join(level.entities) if level.entities else 'None'}")
+        if self.external_files:
+            print("\nExternal Files:")
+            for file in self.external_files:
+                print(f" - {file}")
+
+    def save_to_file(self, file_path="heritage_lineage.json"):
+        """
+        Saves the governance hierarchy to a JSON file.
+        """
+        data = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "lineage": [
+                {
+                    "level": level.name,
+                    "permissions": level.permissions,
+                    "entities": level.entities,
+                }
+                for level in self.lineage
+            ],
+            "external_files": self.external_files,
+        }
+        with open(file_path, "w") as file:
+            json.dump(data, file, indent=4)
+        print(f"Governance hierarchy saved to {file_path}")
+
+
+# Example Usage
+if __name__ == "__main__":
+    heritage = HeritageLineage()
+
+    # Create governance levels
+    heritage.add_level("Trusted Cloud", permissions="Top Governance - All Access")
+    heritage.add_level("Law Module", permissions="Governance Under Cloud - Legal Rules Access")
+    heritage.add_level("Core System", permissions="High Governance - System Operations")
+    heritage.add_level("Linear Pathway Configuration", permissions="Restricted - Pathway Operations")
+    heritage.add_level("API Programs", permissions="Moderate Governance - API Operations")
+    heritage.add_level("Agents and Applications", permissions="Low Governance - Application-Level Operations")
+    heritage.add_level("External Files", permissions="Lowest Governance - Limited Access")
+
+    # Assign entities to levels
+    heritage.assign_entity_to_level("Core Identity Program", "Core System")
+    heritage.assign_entity_to_level("Linear Pathway Launcher", "Linear Pathway Configuration")
+    heritage.assign_entity_to_level("Agent Program", "Agents and Applications")
+    heritage.assign_entity_to_level("File Checker API", "API Programs")
+
+    # Handle external files
+    heritage.handle_external_file("external_file_1.txt")
+    heritage.handle_external_file("untrusted_data.csv")
+
+    # Display the governance hierarchy
+    heritage.display_lineage()
+
+    # Save the hierarchy to a file
+    heritage.save_to_file()
+Heritage Lineage Governance List:
+1. Trusted Cloud (Permissions: Top Governance - All Access)
+   Entities: None
+2. Law Module (Permissions: Governance Under Cloud - Legal Rules Access)
+   Entities: None
+3. Core System (Permissions: High Governance - System Operations)
+   Entities: Core Identity Program
+4. Linear Pathway Configuration (Permissions: Restricted - Pathway Operations)
+   Entities: Linear Pathway Launcher
+5. API Programs (Permissions: Moderate Governance - API Operations)
+   Entities: File Checker API
+6. Agents and Applications (Permissions: Low Governance - Application-Level Operations)
+   Entities: Agent Program
+7. External Files (Permissions: Lowest Governance - Limited Access)
+   Entities: external_file_1.txt, untrusted_data.csv
+
+External Files:
+ - external_file_1.txt
+ - untrusted_data.csv
+{
+    "timestamp": "2025-07-30T03:17:56",
+    "lineage": [
+        {
+            "level": "Trusted Cloud",
+            "permissions": "Top Governance - All Access",
+            "entities": []
+        },
+        {
+            "level": "Law Module",
+            "permissions": "Governance Under Cloud - Legal Rules Access",
+            "entities": []
+        },
+        {
+            "level": "Core System",
+            "permissions": "High Governance - System Operations",
+            "entities": ["Core Identity Program"]
+        },
+        {
+            "level": "Linear Pathway Configuration",
+            "permissions": "Restricted - Pathway Operations",
+            "entities": ["Linear Pathway Launcher"]
+        },
+        {
+            "level": "API Programs",
+            "permissions": "Moderate Governance - API Operations",
+            "entities": ["File Checker API"]
+        },
+        {
+            "level": "Agents and Applications",
+            "permissions": "Low Governance - Application-Level Operations",
+            "entities": ["Agent Program"]
+        },
+        {
+            "level": "External Files",
+            "permissions": "Lowest Governance - Limited Access",
+            "entities": ["external_file_1.txt", "untrusted_data.csv"]
+        }
+    ],
+    "external_files": ["external_file_1.txt", "untrusted_data.csv"]
+}
+external_file_1.txt
