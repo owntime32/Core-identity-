@@ -86,3 +86,71 @@ Executing tile at coordinates (1, 0)...
 Command Two: Processing data...
 Executing tile at coordinates (2, 0)...
 Command Three: Completing pathway...
+import os
+import pwd
+import grp
+import stat
+import subprocess
+
+class FileHeritageManager:
+    """
+    Manages file heritage by restricting modification access to the core system only.
+    """
+
+    def __init__(self, core_user="core-system", core_group="core-group"):
+        self.core_user = core_user
+        self.core_group = core_group
+
+    def apply_heritage(self, file_path):
+        """
+        Applies heritage to the specified file by setting ownership and permissions.
+        Ensures only the core system can modify the file.
+        """
+        try:
+            # Change file ownership to core user and group
+            uid = pwd.getpwnam(self.core_user).pw_uid
+            gid = grp.getgrnam(self.core_group).gr_gid
+            os.chown(file_path, uid, gid)
+
+            # Set file permissions to read-only for others
+            os.chmod(file_path, stat.S_IRUSR | stat.S_IRGRP)
+
+            # Optionally make the file immutable to prevent any modification
+            subprocess.run(["chattr", "+i", file_path], check=True)
+
+            print(f"Heritage applied: {file_path} is now protected.")
+        except KeyError:
+            print(f"Error: User '{self.core_user}' or group '{self.core_group}' does not exist.")
+        except PermissionError:
+            print(f"Permission denied: Cannot modify {file_path}. Are you running as root?")
+        except Exception as e:
+            print(f"An error occurred while applying heritage to {file_path}: {e}")
+
+    def remove_heritage(self, file_path):
+        """
+        Removes heritage by making the file mutable again (if needed).
+        """
+        try:
+            # Remove the immutable flag
+            subprocess.run(["chattr", "-i", file_path], check=True)
+
+            print(f"Heritage removed: {file_path} is now mutable.")
+        except Exception as e:
+            print(f"An error occurred while removing heritage from {file_path}: {e}")
+
+
+# Example Usage
+if __name__ == "__main__":
+    # Replace 'core-system' and 'core-group' with the actual system user and group names
+    heritage_manager = FileHeritageManager(core_user="core-system", core_group="core-group")
+
+    # File paths to protect (add your files here)
+    files_to_protect = [
+        "linear_pathway_configuration",
+        ".hidden_trace.log",
+        "agent_debug.log"
+    ]
+
+    # Apply heritage to the files
+    for file in files_to_protect:
+        heritage_manager.apply
