@@ -94,3 +94,110 @@ if __name__ == "__main__":
     agent.send_debug_to_api()
 
     print("Agent operations completed. Check log file for details.")
+import os
+from datetime import datetime
+import traceback
+
+# Trace File Handler
+class TraceFileHandler:
+    def __init__(self, trace_file=".hidden_trace.log"):
+        # Create a hidden trace file
+        self.trace_file = trace_file
+        self.ensure_trace_file_exists()
+
+    def ensure_trace_file_exists(self):
+        """
+        Ensures that the hidden trace file exists.
+        """
+        if not os.path.exists(self.trace_file):
+            with open(self.trace_file, "w") as file:
+                file.write(f"Trace Log Initialized: {datetime.now().isoformat()}\n")
+
+    def log_trace(self, command, parameters, error=None, details=None):
+        """
+        Logs execution details or errors to the trace file.
+        """
+        with open(self.trace_file, "a") as file:
+            file.write(f"\nTimestamp: {datetime.now().isoformat()}\n")
+            file.write(f"Command: {command}\n")
+            file.write(f"Parameters: {parameters}\n")
+            if error:
+                file.write(f"Error: {str(error)}\n")
+                file.write(f"Traceback:\n{traceback.format_exc()}\n")
+            if details:
+                file.write(f"Details: {details}\n")
+            file.write("-" * 50 + "\n")
+
+    def read_trace(self):
+        """
+        Reads the entire trace file for debugging purposes.
+        """
+        with open(self.trace_file, "r") as file:
+            return file.read()
+
+    def clear_trace(self):
+        """
+        Clears the trace file.
+        """
+        with open(self.trace_file, "w") as file:
+            file.write(f"Trace Log Cleared: {datetime.now().isoformat()}\n")
+
+
+# Example Usage in a Long Command Execution
+class LongCommandExecutor:
+    def __init__(self):
+        self.trace_handler = TraceFileHandler()
+
+    def execute(self, command, parameters):
+        """
+        Executes a long command and logs fallback traces in case of errors.
+        """
+        try:
+            # Simulate a long-running operation
+            if command == "simulate_error":
+                raise ValueError("Simulated pathway error occurred!")
+
+            # Log successful command execution
+            self.trace_handler.log_trace(command, parameters, details="Command executed successfully.")
+            return {"status": "success", "command": command, "parameters": parameters}
+
+        except Exception as e:
+            # Log the error in the hidden trace file
+            self.trace_handler.log_trace(command, parameters, error=e)
+
+            # Return the fallback response
+            return {"status": "error", "message": str(e)}
+
+
+# Main Execution
+if __name__ == "__main__":
+    executor = LongCommandExecutor()
+
+    # Example commands
+    result1 = executor.execute("process_data", {"file": "data.csv"})
+    print(result1)
+
+    result2 = executor.execute("simulate_error", {"param": "value"})
+    print(result2)
+
+    # Optionally, read the hidden trace file for debugging
+    trace_content = executor.trace_handler.read_trace()
+    print("\nHidden Trace File Content:\n", trace_content)
+Trace Log Initialized: 2025-07-30T02:43:41
+
+Timestamp: 2025-07-30T02:43:42
+Command: process_data
+Parameters: {'file': 'data.csv'}
+Details: Command executed successfully.
+--------------------------------------------------
+
+Timestamp: 2025-07-30T02:43:43
+Command: simulate_error
+Parameters: {'param': 'value'}
+Error: Simulated pathway error occurred!
+Traceback:
+Traceback (most recent call last):
+  File "trace_file.py", line 50, in execute
+    raise ValueError("Simulated pathway error occurred!")
+ValueError: Simulated pathway error occurred!
+--------------------------------------------------
