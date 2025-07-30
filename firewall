@@ -24,4 +24,5 @@ class EnhancedFirewall:
 
         log_entry = {
             "timestamp": timestamp,
+
             "
