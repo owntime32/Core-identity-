@@ -1,1 +1,143 @@
 this is a base userface application that prompts to a.i are commenced to launch system services.
+import json
+import datetime
+import random
+from typing import Dict, Any
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.pipeline import Pipeline
+import numpy as np
+
+
+class UserPreferences:
+    """
+    Manages user preferences for a personalized experience.
+    """
+    def __init__(self):
+        self.preferences = {}
+
+    def set_preference(self, user_id: str, preference_key: str, preference_value: Any):
+        """
+        Sets a specific preference for a user.
+        """
+        if user_id not in self.preferences:
+            self.preferences[user_id] = {}
+        self.preferences[user_id][preference_key] = preference_value
+        print(f"[PREFERENCE] Set {preference_key} for User {user_id}: {preference_value}")
+
+    def get_preferences(self, user_id: str) -> Dict[str, Any]:
+        """
+        Retrieves all preferences for a user.
+        """
+        return self.preferences.get(user_id, {})
+
+
+class AICompanion:
+    """
+    AI Companion that interacts with users and adapts to preferences.
+    """
+    def __init__(self, user_preferences: UserPreferences):
+        self.user_preferences = user_preferences
+
+    def respond_to_prompt(self, user_id: str, prompt: str) -> str:
+        """
+        Responds to a user prompt based on preferences.
+        """
+        preferences = self.user_preferences.get_preferences(user_id)
+        response = f"Hello, {preferences.get('name', 'User')}! You asked: {prompt}."
+        print(f"[AI RESPONSE] {response}")
+        return response
+
+
+class MachineLearningModel:
+    """
+    Machine learning model for mapping user prompts and enhancing intelligence.
+    """
+    def __init__(self):
+        # Pipeline with TF-IDF vectorizer and Random Forest Classifier
+        self.pipeline = Pipeline([
+            ("tfidf", TfidfVectorizer()),
+            ("classifier", RandomForestClassifier())
+        ])
+        self.is_trained = False
+
+    def train_model(self, prompts: List[str], labels: List[str]):
+        """
+        Trains the model based on user prompts and labels.
+        """
+        self.pipeline.fit(prompts, labels)
+        self.is_trained = True
+        print("[ML MODEL] Training complete.")
+
+    def predict(self, prompt: str) -> str:
+        """
+        Predicts a response or action based on the user prompt.
+        """
+        if not self.is_trained:
+            print("[ML MODEL] Model is not trained yet!")
+            return "Prediction unavailable."
+        prediction = self.pipeline.predict([prompt])[0]
+        print(f"[ML MODEL] Prediction for '{prompt}': {prediction}")
+        return prediction
+
+
+class UserInteractionLogger:
+    """
+    Logs user interactions for future analysis and model training.
+    """
+    def __init__(self):
+        self.logs = []
+
+    def log_interaction(self, user_id: str, prompt: str, response: str):
+        """
+        Logs a user interaction.
+        """
+        log_entry = {
+            "timestamp": datetime.datetime.utcnow().isoformat(),
+            "user_id": user_id,
+            "prompt": prompt,
+            "response": response
+        }
+        self.logs.append(log_entry)
+        print(f"[LOG] Interaction logged: {log_entry}")
+
+    def export_logs(self, file_path="interaction_logs.json"):
+        """
+        Exports logged interactions to a JSON file.
+        """
+        with open(file_path, "w") as file:
+            json.dump(self.logs, file, indent=4)
+        print(f"[LOG] Interaction logs exported to {file_path}")
+
+
+# Main Program
+if __name__ == "__main__":
+    # Initialize components
+    user_preferences = UserPreferences()
+    ai_companion = AICompanion(user_preferences)
+    ml_model = MachineLearningModel()
+    interaction_logger = UserInteractionLogger()
+
+    # Set user preferences
+    user_id = "user123"
+    user_preferences.set_preference(user_id, "name", "Alex")
+    user_preferences.set_preference(user_id, "theme", "dark")
+
+    # Train the ML model
+    sample_prompts = ["What is the weather?", "Tell me a joke.", "Set a reminder."]
+    sample_labels = ["weather", "joke", "reminder"]
+    ml_model.train_model(sample_prompts, sample_labels)
+
+    # Interact with the AI companion
+    user_prompt = "What is the weather?"
+    ai_response = ai_companion.respond_to_prompt(user_id, user_prompt)
+
+    # Log the interaction
+    interaction_logger.log_interaction(user_id, user_prompt, ai_response)
+
+    # Predict user intent
+    prediction = ml_model.predict(user_prompt)
+    print(f"[PREDICTION] Predicted intent: {prediction}")
+
+    # Export logs
+    interaction_logger.export_logs()
