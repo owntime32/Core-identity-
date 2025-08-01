@@ -265,3 +265,27 @@ def verify_tile(self, tile_id):
         current_hash = hashlib.sha256(json.dumps(tile, sort_keys=True).encode()).hexdigest()
         return expected_hash == current_hash
     return False
+class VirtualTileBoxManager:
+    def __init__(self):
+        self.boxes = {}
+
+    def load_box(self, path):
+        box_id = self.extract_box_id(path)
+        self.boxes[box_id] = self.parse_manifest(path)
+
+    def get_tile_by_key(self, box_id, key):
+        box = self.boxes.get(box_id)
+        if not box:
+            raise Exception("Box not found")
+        return box["tiles"].get(key)
+
+    def render_visual(self, box_id):
+        image_path = self.boxes[box_id]["image"]
+        display_virtual_image(image_path)
+{
+  "tile_id": "a7f9c1",
+  "key": "CORE-API-AGT001",
+  "permission": "execute_only",
+  "lineage": "Core > APIProgram > AgentX",
+  "linked_box": "virtual_box_001"
+}
