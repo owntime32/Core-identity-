@@ -182,3 +182,100 @@ Reverting to hidden node backup for tile tile_001...
 Backup retrieved for tile tile_001. Restoring...
 Restoring commands for tile tile_001...
 Restored data: {'command': 'process_data', 'parameters': {'input': 'data_file.csv', 'output': 'result_file.csv'}, 'timestamp': '2025-07-29T23:45:00.000000'}
+import uuid
+import random
+from typing import List, Dict, Optional
+
+
+# 🔗 Base class for all components with heritage tracking
+class HeritageNode:
+    def __init__(self, name: str, parent_id: Optional[str] = None):
+        self.name = name
+        self.id = str(uuid.uuid4())
+        self.parent_id = parent_id
+        self.task_log: List[Dict] = []
+        self.tile_tag = f"TILE-{random.randint(1000, 9999)}"
+
+    def log_task(self, task_data: Dict):
+        task_data['task_id'] = str(uuid.uuid4())
+        task_data['tile_tag'] = self.tile_tag
+        task_data['parent_id'] = self.parent_id
+        self.task_log.append(task_data)
+        return task_data['task_id']
+
+    def get_lineage(self):
+        return {
+            'id': self.id,
+            'parent': self.parent_id,
+            'tile_tag': self.tile_tag,
+            'tasks': self.task_log
+        }
+
+
+# 🧑‍🤝‍🧑 Group Agent Programs
+class AgentProgram(HeritageNode):
+    def __init__(self, name: str, parent_id: str):
+        super().__init__(name, parent_id)
+
+    def execute_task(self, task_input: Dict):
+        result = {
+            "input": task_input,
+            "output": f"Processed by {self.name}",
+            "performance": random.uniform(0.8, 0.99),
+            "debug": f"No issues on {self.name}"
+        }
+        self.log_task(result)
+        return result
+
+
+# 🔄 API Programs
+class APIProgram(HeritageNode):
+    def __init__(self, name: str, parent_id: str):
+        super().__init__(name, parent_id)
+        self.agents: List[AgentProgram] = []
+
+    def add_agent(self, agent: AgentProgram):
+        self.agents.append(agent)
+
+    def run_agents(self, task_input: Dict):
+        agent_results = []
+        for agent in self.agents:
+            result = agent.execute_task(task_input)
+            agent_results.append(result)
+        self.log_task({"agent_outputs": agent_results})
+        return agent_results
+
+
+# 🧠 Core System
+class CoreSystem(HeritageNode):
+    def __init__(self, name: str):
+        super().__init__(name)
+        self.apis: List[APIProgram] = []
+
+    def add_api(self, api: APIProgram):
+        self.apis.append(api)
+
+    def distribute_task(self, task_input: Dict):
+        all_results = []
+        for api in self.apis:
+            results = api.run_agents(task_input)
+            all_results.append(results)
+        self.learn_from_results(all_results)
+        self.log_task({"distribution_results": all_results})
+        return all_results
+
+    def learn_from_results(self, results):
+        # Simplified ML learning logic placeholder
+        print(f"[Core Learning] Analyzing results from {len(results)} API layers...")
+
+
+# 🧪 Sample setup and execution
+if __name__ == "__main__":
+    # Create core
+    core = CoreSystem("Main Core")
+
+    # Create APIs and assign to core
+    for i in range(5):
+        api = APIProgram(f"API_{i+1}", parent_id=core.id)
+        for j in range(2):  # Two agents per API
+            agent = AgentProgram(f"Agent_{i+1}_{j+1}", parent_id=
