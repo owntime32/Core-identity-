@@ -357,3 +357,19 @@ Retrieved Tile: {
         }
     ]
 }
+class GovernanceManager:
+    def __init__(self):
+        self.rules = []
+        self.roles = {}
+
+    def assign_role(self, app_name, role):
+        self.roles[app_name] = role
+        logging.info(f"Assigned role '{role}' to '{app_name}'.")
+
+    def enforce_governance(self, applications: List[str], task: str):
+        authorized = all(self.roles.get(app, None) in ["admin", "core"] for app in applications)
+        if not authorized:
+            logging.warning(f"Unauthorized access attempt during '{task}' execution.")
+            return "Governance enforcement failed due to unauthorized roles."
+        logging.info(f"Enforcing governance for task '{task}' across applications: {applications}")
+        return f"Governance enforced for task '{task}' across applications: {applications}"
