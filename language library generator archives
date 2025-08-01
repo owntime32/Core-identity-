@@ -256,3 +256,12 @@ if __name__ == "__main__":
         }
     }
 }
+def verify_tile(self, tile_id):
+    path = os.path.join(self.library_path, f"{tile_id}.json")
+    if os.path.exists(path):
+        with open(path) as f:
+            tile = json.load(f)
+        expected_hash = self._hash_tile(tile)
+        current_hash = hashlib.sha256(json.dumps(tile, sort_keys=True).encode()).hexdigest()
+        return expected_hash == current_hash
+    return False
