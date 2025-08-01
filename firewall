@@ -158,3 +158,13 @@ if __name__ == "__main__":
     diagnostic_report = firewall.generate_diagnostic_report()
     print("\nFinal Diagnostic Report:")
     print(json.dumps(diagnostic_report, indent=4))
+self.allowlist = {"trustedcloud.io", "admin-system.local"}
+
+def is_allowed(self, website: str) -> bool:
+    return website in self.allowlist
+def decay_threats(self):
+    # Remove entries older than X days
+    cutoff = datetime.datetime.utcnow() - datetime.timedelta(days=3)
+    self.threat_log = [log for log in self.threat_log if datetime.datetime.fromisoformat(log['timestamp']) > cutoff]
+trustedcloud.io
+self.allowlist
