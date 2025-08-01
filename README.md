@@ -186,8 +186,6 @@ import uuid
 import random
 from typing import List, Dict, Optional
 
-
-# 🔗 Base class for all components with heritage tracking
 class HeritageNode:
     def __init__(self, name: str, parent_id: Optional[str] = None):
         self.name = name
@@ -211,8 +209,6 @@ class HeritageNode:
             'tasks': self.task_log
         }
 
-
-# 🧑‍🤝‍🧑 Group Agent Programs
 class AgentProgram(HeritageNode):
     def __init__(self, name: str, parent_id: str):
         super().__init__(name, parent_id)
@@ -228,7 +224,6 @@ class AgentProgram(HeritageNode):
         return result
 
 
-# 🔄 API Programs
 class APIProgram(HeritageNode):
     def __init__(self, name: str, parent_id: str):
         super().__init__(name, parent_id)
@@ -246,7 +241,7 @@ class APIProgram(HeritageNode):
         return agent_results
 
 
-# 🧠 Core System
+
 class CoreSystem(HeritageNode):
     def __init__(self, name: str):
         super().__init__(name)
@@ -267,10 +262,6 @@ class CoreSystem(HeritageNode):
     def learn_from_results(self, results):
         # Simplified ML learning logic placeholder
         print(f"[Core Learning] Analyzing results from {len(results)} API layers...")
-
-
-# 🧪 Sample setup and execution
-if __name__ == "__main__":
     # Create core
     core = CoreSystem("Main Core")
 
