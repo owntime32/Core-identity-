@@ -262,3 +262,28 @@ def verify_tile(self, tile_id):
         current_hash = hashlib.sha256(json.dumps(tile, sort_keys=True).encode()).hexdigest()
         return expected_hash == current_hash
     return False
+class EventTriggerSystem:
+    def __init__(self):
+        self.event_log = []
+        self.sequence_triggers = {}
+
+    def register_trigger(self, name, sequence, meta_file_path):
+        self.sequence_triggers[name] = {'sequence': sequence, 'path': meta_file_path}
+
+    def log_event(self, event):
+        self.event_log.append(event)
+        self.check_triggers()
+
+    def check_triggers(self):
+        for name, trigger in self.sequence_triggers.items():
+            if self.event_log[-len(trigger['sequence']):] == trigger['sequence']:
+                MetaFileLauncher.launch(trigger['path'])
+import zipfile
+
+class MetaFileLauncher:
+    @staticmethod
+    def launch(meta_file_path):
+        with zipfile.ZipFile(meta_file_path, 'r') as archive:
+            archive.extractall('/tmp/meta_exec')
+            # Here you could call a function to execute extracted tiles
+            CoreSystem.execute_tiles_from('/tmp/meta_exec')
