@@ -141,3 +141,47 @@ if __name__ == "__main__":
 
     # Export logs
     interaction_logger.export_logs()
+if __name__ == "__main__":
+    ...
+    sanitized_prompt = sanitize_prompt(user_prompt)
+    ai_response = ai_companion.respond_to_prompt(user_id, sanitized_prompt)
+    interaction_logger.log_interaction(user_id, user_prompt, ai_response)
+    
+    predicted_intent = ml_model.predict(sanitized_prompt)
+    launcher = SystemServiceLauncher()
+    service_response = launcher.launch_service(predicted_intent)
+    
+    print(service_response)
+class SystemServiceLauncher:
+    def __init__(self):
+        self.services = {
+            "weather": self.launch_weather_service,
+            "joke": self.launch_joke_service,
+            "reminder": self.launch_reminder_service
+        }
+
+    def launch_service(self, intent: str):
+        if intent in self.services:
+            return self.services[intent]()
+        else:
+            return f"[LAUNCHER] No service mapped for intent '{intent}'"
+
+    def launch_weather_service(self):
+        return "[SERVICE] Fetching weather data..."
+
+    def launch_joke_service(self):
+        return "[SERVICE] Here's a joke: Why did the AI cross the road? To optimize the other side."
+
+    def launch_reminder_service(self):
+        return "[SERVICE] Reminder set for 3 PM."
+if __name__ == "__main__":
+    ...
+    sanitized_prompt = sanitize_prompt(user_prompt)
+    ai_response = ai_companion.respond_to_prompt(user_id, sanitized_prompt)
+    interaction_logger.log_interaction(user_id, user_prompt, ai_response)
+    
+    predicted_intent = ml_model.predict(sanitized_prompt)
+    launcher = SystemServiceLauncher()
+    service_response = launcher.launch_service(predicted_intent)
+    
+    print(service_response)
