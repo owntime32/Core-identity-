@@ -225,3 +225,52 @@ results = plpo.launch_parallel_pathways(user_prompt)
 # Show results
 for r in results:
     print(r)
+from typing import List, Dict, Any
+import uuid
+import datetime
+
+
+class PathwayConfigurator:
+    """
+    Manages configuration, priority, and dispatching of linear and parallel pathways.
+    """
+    def __init__(self):
+        self.pathways: Dict[str, Dict[str, Any]] = {}
+
+    def define_pathway(self, name: str, steps: List[str], priority: int = 1, metadata: Dict[str, Any] = None) -> str:
+        """
+        Defines a new pathway and returns its ID.
+        """
+        pathway_id = str(uuid.uuid4())
+        self.pathways[pathway_id] = {
+            "name": name,
+            "steps": steps,
+            "priority": priority,
+            "metadata": metadata or {},
+            "timestamp": datetime.datetime.utcnow().isoformat()
+        }
+        print(f"[CONFIG] Pathway '{name}' defined with ID: {pathway_id}")
+        return pathway_id
+
+    def get_pathway(self, pathway_id: str) -> Dict[str, Any]:
+        """
+        Retrieves a pathway configuration.
+        """
+        return self.pathways.get(pathway_id, {})
+
+    def list_pathways(self) -> List[Dict[str, Any]]:
+        """
+        Lists all defined pathways sorted by priority.
+        """
+        return sorted(self.pathways.values(), key=lambda x: x['priority'], reverse=True)
+
+    def dispatch_to_orchestrator(self, orchestrator, pathway_id: str, agent_registry: Dict[str, Any]):
+        """
+        Sends a configured pathway to the orchestrator for execution.
+        """
+        pathway = self.get_pathway(pathway_id)
+        if not pathway:
+            print(f"[CONFIG] No pathway found for ID: {pathway_id}")
+            return
+        print(f"[DISPATCH] Dispatching pathway '{pathway['name']}' to orchestrator.")
+        orchestrator.execute_pathway(pathway, agent_registry)
