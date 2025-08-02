@@ -350,3 +350,81 @@ class WebAceCopilot:
             "agent_history": self.fetch_agent_feedback(),
             "linked_data": tiles
         }
+Core Imports
+
+import datetime import json from typing import List, Dict, Any
+
+--- User Preferences ---
+
+class UserPreferences: def init(self): self.preferences = {}
+
+def set_preference(self, user_id: str, key: str, value: Any):
+    if user_id not in self.preferences:
+        self.preferences[user_id] = {}
+    self.preferences[user_id][key] = value
+
+def get_preferences(self, user_id: str) -> Dict[str, Any]:
+    return self.preferences.get(user_id, {})
+
+--- AI Companion ---
+
+class AICompanion: def init(self, user_preferences: UserPreferences): self.user_preferences = user_preferences
+
+def respond_to_prompt(self, user_id: str, prompt: str) -> str:
+    preferences = self.user_preferences.get_preferences(user_id)
+    return f"Hello, {preferences.get('name', 'User')}! You asked: {prompt}."
+
+--- Machine Learning Core ---
+
+from sklearn.pipeline import Pipeline from sklearn.ensemble import RandomForestClassifier from sklearn.feature_extraction.text import TfidfVectorizer
+
+class CoreML: def init(self): self.pipeline = Pipeline([ ("tfidf", TfidfVectorizer()), ("classifier", RandomForestClassifier()) ]) self.is_trained = False
+
+def train(self, prompts: List[str], labels: List[str]):
+    self.pipeline.fit(prompts, labels)
+    self.is_trained = True
+
+def predict(self, prompt: str) -> str:
+    if not self.is_trained:
+        return "Prediction unavailable."
+    return self.pipeline.predict([prompt])[0]
+
+--- Logger ---
+
+class UserInteractionLogger: def init(self): self.logs = []
+
+def log(self, user_id: str, prompt: str, response: str):
+    self.logs.append({
+        "timestamp": datetime.datetime.utcnow().isoformat(),
+        "user_id": user_id,
+        "prompt": prompt,
+        "response": response
+    })
+
+def export(self, path="interaction_logs.json"):
+    with open(path, "w") as f:
+        json.dump(self.logs, f, indent=4)
+
+--- Tile Library ---
+
+class TileLibrary: def init(self): self.tiles = {}
+
+def add_tile(self, key: str, content: str):
+    self.tiles[key] = content
+
+def search_by_keys(self, keys: List[str]) -> Dict[str, str]:
+    return {k: v for k, v in self.tiles.items() if k in keys}
+
+--- WebAce Reasoning Engine ---
+
+class WebAceEngine: def refine_directive(self, directive: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]: # Simple heuristic: add context tags if missing refined = directive.copy() if "context_tags" not in refined: refined["context_tags"] = list(context.keys()) return refined
+
+--- WebAce Copilot ---
+
+class WebAceCopilot: def init(self, tile_library: TileLibrary, engine: WebAceEngine): self.tile_library = tile_library self.engine = engine
+
+def receive_directive(self, directive: Dict[str, Any]) -> Dict[str, Any]:
+    keys = directive.get("keywords", [])
+    tiles = self.tile_library.search_by_keys(keys)
+    context = {"logs": tiles, "status
+
