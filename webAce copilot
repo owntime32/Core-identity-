@@ -822,4 +822,76 @@ for r in results:
     print(r)
 
 interaction_logger.export_logs()
+import uuid
+import json
+import time
+import traceback
 
+class SandboxedNode:
+    def __init__(self, node_id: str, parent_id: str, governance_level: str):
+        self.node_id = node_id
+        self.parent_id = parent_id
+        self.governance_level = governance_level
+        self.allowed_commands = set()
+        self.execution_log = []
+
+    def set_allowed_commands(self, commands):
+        self.allowed_commands = set(commands)
+
+    def execute_command(self, command: str, payload: dict):
+        """
+        Executes a command only if it's allowed. Logs all activities securely.
+        """
+        log_entry = {
+            "timestamp": time.time(),
+            "node_id": self.node_id,
+            "command": command,
+            "status": "",
+            "result": None
+        }
+
+        if command not in self.allowed_commands:
+            log_entry["status"] = "DENIED"
+            log_entry["result"] = "Command not allowed by sandbox policy"
+            self.execution_log.append(log_entry)
+            return log_entry
+
+        try:
+            # Example simulated command execution
+            result = self.simulate_command_execution(command, payload)
+            log_entry["status"] = "EXECUTED"
+            log_entry["result"] = result
+        except Exception as e:
+            log_entry["status"] = "ERROR"
+            log_entry["result"] = str(e) + "\n" + traceback.format_exc()
+
+        self.execution_log.append(log_entry)
+        return log_entry
+
+    def simulate_command_execution(self, command: str, payload: dict):
+        """
+        Simulate execution – replace this with real logic or subprocess management.
+        """
+        if command == "ping":
+            return {"response": "pong", "payload": payload}
+        elif command == "store":
+            return {"status": "stored", "data": payload}
+        else:
+            raise ValueError("Unsupported command")
+
+    def export_logs(self):
+        return json.dumps(self.execution_log, indent=4)
+
+
+# === Example Usage ===
+if __name__ == "__main__":
+    # Creating a node under Core Governance
+    core_node = SandboxedNode(node_id=str(uuid.uuid4()), parent_id="CORE", governance_level="strict")
+    core_node.set_allowed_commands(["ping", "store"])
+
+    # Simulate executions
+    print(core_node.execute_command("ping", {"message": "hello"}))
+    print(core_node.execute_command("hack", {}))  # Should be denied
+
+    # Export logs for auditing
+    print(core_node.export_logs())
