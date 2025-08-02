@@ -201,3 +201,14 @@ Traceback (most recent call last):
     raise ValueError("Simulated pathway error occurred!")
 ValueError: Simulated pathway error occurred!
 --------------------------------------------------
+
+class CoreEventBus:
+    def __init__(self):
+        self.listeners = {}
+
+    def register(self, event_type, handler):
+        self.listeners.setdefault(event_type, []).append(handler)
+
+    def emit(self, event_type, payload):
+        for handler in self.listeners.get(event_type, []):
+            handler(payload)
