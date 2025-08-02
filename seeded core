@@ -318,3 +318,41 @@ class APIModule:
     def view_logs(self):
         result = self.tool_manager.request_tool("API", "log_inspector", "fetch_last_100")
         print(result)
+class WebAceCopilot:
+    def __init__(self, tool_library):
+        self.tool_library = tool_library
+
+    def discover_and_link(self, query: str, tile_id: str) -> str:
+        match = self.tool_library.search_tool(query)
+        if match:
+            match.link_to_tile(tile_id)
+            return f"[WebAce] Linked '{match.name}' to Tile {tile_id}"
+        return "[WebAce] No matching tool found."
+class PerformanceTool:
+    def __init__(self, name: str, capabilities: list):
+        self.name = name
+        self.capabilities = capabilities
+        self.linked_tiles = []
+
+    def link_to_tile(self, tile_id: str):
+        self.linked_tiles.append(tile_id)
+
+class Toolbox:
+    def __init__(self):
+        self.tools = []
+
+    def add_tool(self, tool: PerformanceTool):
+        self.tools.append(tool)
+
+    def search_tool(self, keyword: str):
+        for tool in self.tools:
+            if keyword.lower() in tool.name.lower():
+                return tool
+        return None
+class ToolLinkLearningEngine:
+    def __init__(self):
+        self.link_log = []
+
+    def record_usage(self, tile_id: str, tool_name: str):
+        self.link_log.append((tile_id, tool_name))
+        # Later: Use this data to retrain or prioritize tool recommendations
