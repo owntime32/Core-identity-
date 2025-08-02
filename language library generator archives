@@ -289,3 +289,75 @@ class VirtualTileBoxManager:
   "lineage": "Core > APIProgram > AgentX",
   "linked_box": "virtual_box_001"
 }
+import json
+from typing import List, Dict, Optional
+
+
+class PerformanceTool:
+    def __init__(self, name: str, category: str, capabilities: List[str], tags: List[str]):
+        self.name = name
+        self.category = category
+        self.capabilities = capabilities
+        self.tags = tags
+        self.linked_tiles = []
+
+    def link_to_tile(self, tile_id: str):
+        if tile_id not in self.linked_tiles:
+            self.linked_tiles.append(tile_id)
+
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "category": self.category,
+            "capabilities": self.capabilities,
+            "tags": self.tags,
+            "linked_tiles": self.linked_tiles
+        }
+
+    @staticmethod
+    def from_dict(data: Dict):
+        tool = PerformanceTool(
+            name=data["name"],
+            category=data["category"],
+            capabilities=data["capabilities"],
+            tags=data["tags"]
+        )
+        tool.linked_tiles = data.get("linked_tiles", [])
+        return tool
+
+
+class ToolboxLibrary:
+    def __init__(self):
+        self.tools: List[PerformanceTool] = []
+
+    def add_tool(self, tool: PerformanceTool):
+        self.tools.append(tool)
+        print(f"[TOOLBOX] Tool added: {tool.name}")
+
+    def search_tool(self, keyword: str) -> Optional[PerformanceTool]:
+        for tool in self.tools:
+            if (keyword.lower() in tool.name.lower() or
+                keyword.lower() in tool.category.lower() or
+                keyword.lower() in [tag.lower() for tag in tool.tags]):
+                return tool
+        return None
+
+    def link_tool_to_tile(self, tool_name: str, tile_id: str):
+        tool = self.search_tool(tool_name)
+        if tool:
+            tool.link_to_tile(tile_id)
+            print(f"[LINK] Tool '{tool.name}' linked to Tile {tile_id}")
+        else:
+            print(f"[LINK] Tool '{tool_name}' not found")
+
+    def export_archive(self, file_path: str = "toolbox_archive.json"):
+        archive = [tool.to_dict() for tool in self.tools]
+        with open(file_path, "w") as f:
+            json.dump(archive, f, indent=4)
+        print(f"[EXPORT] Toolbox archive saved to {file_path}")
+
+    def import_archive(self, file_path: str = "toolbox_archive.json"):
+        with open(file_path, "r") as f:
+            archive = json.load(f)
+        self.tools = [PerformanceTool.from_dict(data) for data in archive]
+        print(f"[IMPORT] Toolbox archive loaded from {file_path}")
