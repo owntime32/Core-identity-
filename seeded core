@@ -356,3 +356,69 @@ class ToolLinkLearningEngine:
     def record_usage(self, tile_id: str, tool_name: str):
         self.link_log.append((tile_id, tool_name))
         # Later: Use this data to retrain or prioritize tool recommendations
+import random
+from collections import defaultdict
+from typing import List, Dict
+
+
+class ExecutionLog:
+    def __init__(self, tile_id: str, tool_name: str, task_type: str, success: bool, debug_notes: str = ""):
+        self.tile_id = tile_id
+        self.tool_name = tool_name
+        self.task_type = task_type
+        self.success = success
+        self.debug_notes = debug_notes
+
+
+class ToolRelevanceEngine:
+    def __init__(self):
+        self.logs: List[ExecutionLog] = []
+        self.tool_scores: Dict[str, float] = defaultdict(float)
+        self.task_tool_usage: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
+
+    def record_execution(self, tile_id: str, tool_name: str, task_type: str, success: bool, debug_notes: str = ""):
+        log = ExecutionLog(tile_id, tool_name, task_type, success, debug_notes)
+        self.logs.append(log)
+
+        # Basic scoring logic
+        score_delta = 1 if success else -0.5
+        self.tool_scores[tool_name] += score_delta
+        self.task_tool_usage[task_type][tool_name] += 1
+
+        print(f"[LOG] Tool '{tool_name}' on Task '{task_type}' - {'Success' if success else 'Failure'} | Debug: {debug_notes}")
+
+    def get_top_tools_for_task(self, task_type: str, top_n: int = 3) -> List[str]:
+        usage = self.task_tool_usage.get(task_type, {})
+        if not usage:
+            return []
+        sorted_tools = sorted(usage.items(), key=lambda x: self.tool_scores.get(x[0], 0), reverse=True)
+        return [tool for tool, _ in sorted_tools[:top_n]]
+
+    def debug_report(self) -> Dict[str, float]:
+        return dict(self.tool_scores)
+
+    def simulate_random_logs(self, tool_names: List[str], task_types: List[str], n: int = 50):
+        for _ in range(n):
+            tool = random.choice(tool_names)
+            task = random.choice(task_types)
+            success = random.random() > 0.3
+            self.record_execution(
+                tile_id=f"tile_{random.randint(100,999)}",
+                tool_name=tool,
+                task_type=task,
+                success=success,
+                debug_notes="AutoSim"
+            )
+if __name__ == "__main__":
+    engine = ToolRelevanceEngine()
+
+    tools = ["CPU Monitor", "Memory Optimizer", "Cache Cleaner", "Task Profiler"]
+    tasks = ["performance", "optimization", "memory_management", "cpu_debug"]
+
+    engine.simulate_random_logs(tools, tasks)
+
+    print("\n[REPORT] Tool Scores:")
+    print(engine.debug_report())
+
+    print("\n[TOP TOOLS] For 'performance':")
+    print(engine.get_top_tools_for_task("performance"))
