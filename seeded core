@@ -287,3 +287,34 @@ class MetaFileLauncher:
             archive.extractall('/tmp/meta_exec')
             # Here you could call a function to execute extracted tiles
             CoreSystem.execute_tiles_from('/tmp/meta_exec')
+class ToolManager:
+    def __init__(self):
+        self.tools = {
+            "diagnostic": SystemTool("Diagnostic"),
+            "log_inspector": SystemTool("LogInspector"),
+        }
+        self.permissions = {
+            "Core": ["diagnostic", "log_inspector"],
+            "API": ["log_inspector"]
+        }
+
+    def request_tool(self, module_name: str, tool_name: str, command: str) -> str:
+        if tool_name in self.permissions.get(module_name, []):
+            return self.tools[tool_name].execute(command)
+        return f"[DENIED] {module_name} not authorized for {tool_name}"
+class CoreSystem:
+    def __init__(self, tool_manager: ToolManager):
+        self.tool_manager = tool_manager
+
+    def run_diagnostic(self):
+        result = self.tool_manager.request_tool("Core", "diagnostic", "check_all")
+        print(result)
+
+
+class APIModule:
+    def __init__(self, tool_manager: ToolManager):
+        self.tool_manager = tool_manager
+
+    def view_logs(self):
+        result = self.tool_manager.request_tool("API", "log_inspector", "fetch_last_100")
+        print(result)
