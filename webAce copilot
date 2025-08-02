@@ -318,3 +318,35 @@ if __name__ == "__main__":
     # Run diagnostics
     system_api.run_diagnostics()
 ...
+flowchart TD
+    A[User/System Directive] --> B[WebAce Copilot Listener]
+    B --> C[Retrieve Linked Tiles via Keys]
+    C --> D[Aggregate Context + Logs]
+    D --> E[WebAce Reasoning Engine (Focus Algorithm)]
+    E --> F{Optimize or Override?}
+    F -->|Yes| G[Generate Restructured Task Chain]
+    F -->|No| H[Preserve Directive as-is]
+    G --> I[Feed to API & Agents]
+    H --> I
+    I --> J[Monitor Execution & Log Feedback]
+    J --> K[Update WebAce Model]
+class WebAceCopilot:
+    def __init__(self, tile_library, reasoning_engine):
+        self.tile_library = tile_library
+        self.engine = reasoning_engine
+
+    def receive_directive(self, directive):
+        keys = directive.get("keywords", [])
+        related_tiles = self.tile_library.search_by_keys(keys)
+
+        context = self.aggregate_context(related_tiles)
+        focused_directive = self.engine.refine_directive(directive, context)
+
+        return focused_directive
+
+    def aggregate_context(self, tiles):
+        return {
+            "logs": self.fetch_logs(tiles),
+            "agent_history": self.fetch_agent_feedback(),
+            "linked_data": tiles
+        }
