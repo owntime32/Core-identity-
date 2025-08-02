@@ -629,6 +629,73 @@ for r in results:
 
 interaction_logger.export_logs()
 
+from typing import List, Dict, Any
+import random
 
+class WebAceCopilot:
+    """
+    Intelligent assistant that locates and selects relevant tools from the toolbox
+    based on task type and tool relevance scoring.
+    """
 
+    def __init__(self, toolbox, relevance_engine):
+        self.toolbox = toolbox
+        self.relevance_engine = relevance_engine
 
+    def fetch_tools_for_task(self, task_type: str) -> List[Dict[str, Any]]:
+        """
+        Retrieve and rank relevant tools for the given task type.
+        """
+        all_tools = self.toolbox.get_tools_by_task(task_type)
+        ranked_tools = self.relevance_engine.rank_tools(task_type, all_tools)
+        print(f"[COPILOT] Fetched ranked tools for task '{task_type}': {[t['name'] for t in ranked_tools]}")
+        return ranked_tools
+
+    def execute_task_with_tools(self, task_type: str, tile_id: str) -> str:
+        """
+        Executes the highest-ranked tools on the specified tile for a task.
+        Updates tool relevance based on success/failure of execution.
+        """
+        tools = self.fetch_tools_for_task(task_type)
+        for tool in tools:
+            try:
+                result = tool['function'](tile_id)
+                self.relevance_engine.update_relevance(task_type, tool['name'], result)
+                print(f"[COPILOT] Tool '{tool['name']}' executed on tile {tile_id} with result: {result}")
+                if result:
+                    return f"Task '{task_type}' executed successfully with tool '{tool['name']}'"
+            except Exception as e:
+                self.relevance_engine.update_relevance(task_type, tool['name'], False)
+                print(f"[ERROR] Tool '{tool['name']}' failed on tile {tile_id}: {e}")
+        return f"Task '{task_type}' failed — no successful tool execution."
+
+    def suggest_debug_tools(self, failed_task_type: str) -> List[str]:
+        """
+        Suggests alternative tools based on past failures and success rates.
+        """
+        tools = self.relevance_engine.get_top_fallback_tools(failed_task_type)
+        print(f"[COPILOT] Suggested debug tools for '{failed_task_type}': {tools}")
+        return tools
+copilot = WebAceCopilot(toolbox_library, relevance_engine)
+
+# Execute a task using WebAce Copilot
+result = copilot.execute_task_with_tools("optimize_speed", "tile_45")
+print(result)
+
+# Get suggestions after a failed execution
+fallbacks = copilot.suggest_debug_tools("optimize_speed")
+# New task trigger in the system
+task_type = "optimize_memory"
+tile_id = "tile_91"
+
+# WebAce handles smart tool retrieval
+tools = relevance_engine.get_relevant_tools(task_type)
+for tool in tools:
+    success = tool.execute_on(tile_id)
+    relevance_engine.update_relevance(task_type, tool.name, success)
+# Called during task execution
+def enhanced_tile_execution(tile_id, task_type):
+    relevant_tools = relevance_engine.get_relevant_tools(task_type)
+    for tool in relevant_tools:
+        result = tool.execute_on(tile_id)
+        relevance_engine.update_relevance(task_type, tool.name, result)
