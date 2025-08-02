@@ -185,3 +185,91 @@ if __name__ == "__main__":
     service_response = launcher.launch_service(predicted_intent)
     
     print(service_response)
+import json import datetime from typing import Dict, Any, List from sklearn.ensemble import RandomForestClassifier from sklearn.feature_extraction.text import TfidfVectorizer from sklearn.pipeline import Pipeline import numpy as np
+
+class UserPreferences: def init(self): self.preferences = {}
+
+def set_preference(self, user_id: str, preference_key: str, preference_value: Any):
+    if user_id not in self.preferences:
+        self.preferences[user_id] = {}
+    self.preferences[user_id][preference_key] = preference_value
+
+def get_preferences(self, user_id: str) -> Dict[str, Any]:
+    return self.preferences.get(user_id, {})
+
+class AICompanion: def init(self, user_preferences: UserPreferences): self.user_preferences = user_preferences
+
+def respond_to_prompt(self, user_id: str, prompt: str) -> str:
+    preferences = self.user_preferences.get_preferences(user_id)
+    return f"Hello, {preferences.get('name', 'User')}! You asked: {prompt}."
+
+class MachineLearningModel: def init(self): self.pipeline = Pipeline([ ("tfidf", TfidfVectorizer()), ("classifier", RandomForestClassifier()) ]) self.is_trained = False
+
+def train_model(self, prompts: List[str], labels: List[str]):
+    self.pipeline.fit(prompts, labels)
+    self.is_trained = True
+
+def predict(self, prompt: str) -> str:
+    if not self.is_trained:
+        return "Prediction unavailable."
+    return self.pipeline.predict([prompt])[0]
+
+class UserInteractionLogger: def init(self): self.logs = []
+
+def log_interaction(self, user_id: str, prompt: str, response: str):
+    self.logs.append({
+        "timestamp": datetime.datetime.utcnow().isoformat(),
+        "user_id": user_id,
+        "prompt": prompt,
+        "response": response
+    })
+
+def export_logs(self, file_path="interaction_logs.json"):
+    with open(file_path, "w") as file:
+        json.dump(self.logs, file, indent=4)
+
+class SystemServiceLauncher: def init(self): self.services = { "weather": self.launch_weather_service, "joke": self.launch_joke_service, "reminder": self.launch_reminder_service }
+
+def launch_service(self, intent: str):
+    return self.services[intent]() if intent in self.services else f"[LAUNCHER] No service mapped for '{intent}'"
+
+def launch_weather_service(self):
+    return "[SERVICE] Fetching weather data..."
+
+def launch_joke_service(self):
+    return "[SERVICE] Here's a joke: Why did the AI cross the road? To optimize the other side."
+
+def launch_reminder_service(self):
+    return "[SERVICE] Reminder set for 3 PM."
+
+class LinearPathwayManager: def init(self): self.pathways = { "weather": ["fetch_weather_data", "log_weather_intent"], "joke": ["select_joke_template", "log_joke_intent"], "reminder": ["store_reminder_time", "log_reminder_intent"] }
+
+def launch_pathways(self, intent: str):
+    steps = self.pathways.get(intent, [])
+    output = [f"[PATHWAY] Step: {step}" for step in steps]
+    return output
+
+if name == "main": user_preferences = UserPreferences() ai_companion = AICompanion(user_preferences) ml_model = MachineLearningModel() interaction_logger = UserInteractionLogger() launcher = SystemServiceLauncher() pathway_manager = LinearPathwayManager()
+
+user_id = "user123"
+user_preferences.set_preference(user_id, "name", "Alex")
+
+sample_prompts = ["What is the weather?", "Tell me a joke.", "Set a reminder."]
+sample_labels = ["weather", "joke", "reminder"]
+ml_model.train_model(sample_prompts, sample_labels)
+
+user_prompt = "Tell me a joke."
+ai_response = ai_companion.respond_to_prompt(user_id, user_prompt)
+interaction_logger.log_interaction(user_id, user_prompt, ai_response)
+
+predicted_intent = ml_model.predict(user_prompt)
+service_response = launcher.launch_service(predicted_intent)
+pathway_steps = pathway_manager.launch_pathways(predicted_intent)
+
+print(ai_response)
+print(service_response)
+for step in pathway_steps:
+    print(step)
+
+interaction_logger.export_logs()
+
