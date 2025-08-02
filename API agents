@@ -212,3 +212,95 @@ class CoreEventBus:
     def emit(self, event_type, payload):
         for handler in self.listeners.get(event_type, []):
             handler(payload)
+import threading
+from typing import List, Dict, Callable
+import random
+import time
+
+
+class Pathway:
+    def __init__(self, id: str, tasks: List[Callable], metadata: Dict[str, any]):
+        self.id = id
+        self.tasks = tasks
+        self.metadata = metadata
+        self.relevance_score = 0.0
+
+
+class PathwayRelevanceScorer:
+    def __init__(self):
+        pass
+
+    def score(self, pathway: Pathway, context: Dict[str, str]) -> float:
+        # Simulate scoring based on keyword matching
+        score = 0.0
+        for key, value in context.items():
+            if key in pathway.metadata and pathway.metadata[key] == value:
+                score += 1.0
+        return score
+
+
+class APIAgent:
+    def __init__(self, name: str):
+        self.name = name
+
+    def execute_task(self, task: Callable):
+        try:
+            task()
+            print(f"[{self.name}] Task executed successfully.")
+        except Exception as e:
+            print(f"[{self.name}] Error executing task: {e}")
+
+
+class MultiPathwayOrchestrator:
+    def __init__(self, agents: List[APIAgent]):
+        self.agents = agents
+        self.relevance_scorer = PathwayRelevanceScorer()
+
+    def launch_pathways(self, pathways: List[Pathway], context: Dict[str, str]):
+        # Score each pathway for relevance
+        for p in pathways:
+            p.relevance_score = self.relevance_scorer.score(p, context)
+
+        # Sort pathways by score (descending)
+        sorted_pathways = sorted(pathways, key=lambda x: x.relevance_score, reverse=True)
+
+        print("\n[ORCHESTRATOR] Launching pathways in parallel...\n")
+        threads = []
+        for index, pathway in enumerate(sorted_pathways):
+            agent = self.agents[index % len(self.agents)]
+            t = threading.Thread(target=self._run_pathway, args=(agent, pathway))
+            threads.append(t)
+            t.start()
+
+        for t in threads:
+            t.join()
+
+    def _run_pathway(self, agent: APIAgent, pathway: Pathway):
+        print(f"[{agent.name}] Starting Pathway: {pathway.id} (Relevance: {pathway.relevance_score})")
+        for task in pathway.tasks:
+            agent.execute_task(task)
+            time.sleep(0.1)  # Simulate delay
+
+
+# === Example Usage ===
+if __name__ == "__main__":
+    # Simulated task functions
+    def task1(): print("🔧 Task 1 running.")
+    def task2(): print("📡 Task 2 running.")
+    def task3(): print("🧠 Task 3 running.")
+
+    # Create API Agents
+    agents = [APIAgent("AgentA"), APIAgent("AgentB"), APIAgent("AgentC")]
+
+    # Create Pathways
+    pathways = [
+        Pathway("PathwayAlpha", [task1, task2], {"type": "system", "priority": "high"}),
+        Pathway("PathwayBeta", [task3], {"type": "network", "priority": "low"}),
+        Pathway("PathwayGamma", [task2, task3], {"type": "system", "priority": "high"})
+    ]
+
+    # Create Orchestrator and Context
+    orchestrator = MultiPathwayOrchestrator(agents)
+    execution_context = {"type": "system", "priority": "high"}
+
+    orchestrator.launch_pathways(pathways, execution_context)
