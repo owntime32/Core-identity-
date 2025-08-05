@@ -1,0 +1,85 @@
+self training loops aimed for improving performance and memory efficiency 
+import json
+import os
+import datetime
+from typing import List
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.pipeline import Pipeline
+import joblib
+
+
+class SelfTrainingAI:
+    def __init__(self, model_path="trained_model.pkl", log_path="interaction_logs.json"):
+        self.model_path = model_path
+        self.log_path = log_path
+        self.model = self._build_model()
+        self.logs = self._load_logs()
+        self._trained = False
+
+        if os.path.exists(model_path):
+            self.model = joblib.load(model_path)
+            self._trained = True
+            print("[LOAD] Trained model loaded from disk.")
+
+    def _build_model(self):
+        # TF-IDF + Random Forest with constraints for performance
+        return Pipeline([
+            ("tfidf", TfidfVectorizer(max_features=1000)),
+            ("clf", RandomForestClassifier(n_estimators=50, max_depth=10, random_state=42))
+        ])
+
+    def _load_logs(self):
+        if os.path.exists(self.log_path):
+            with open(self.log_path, "r") as file:
+                return json.load(file)
+        return []
+
+    def log_interaction(self, prompt: str, label: str):
+        entry = {
+            "timestamp": datetime.datetime.utcnow().isoformat(),
+            "prompt": prompt,
+            "label": label
+        }
+        self.logs.append(entry)
+        with open(self.log_path, "w") as file:
+            json.dump(self.logs, file, indent=4)
+        print(f"[LOGGED] Prompt '{prompt}' → Label '{label}'")
+
+    def train(self):
+        if len(self.logs) < 2:
+            print("[TRAINING] Not enough data to train.")
+            return
+
+        prompts = [entry["prompt"] for entry in self.logs]
+        labels = [entry["label"] for entry in self.logs]
+
+        self.model.fit(prompts, labels)
+        joblib.dump(self.model, self.model_path)
+        self._trained = True
+        print("[TRAINING] Model trained and saved.")
+
+    def predict(self, prompt: str) -> str:
+        if not self._trained:
+            print("[WARNING] Model is not trained yet.")
+            return "unknown"
+        prediction = self.model.predict([prompt])[0]
+        print(f"[PREDICT] Prompt '{prompt}' → Predicted: {prediction}")
+        return prediction
+
+
+# Example Usage
+if __name__ == "__main__":
+    ai = SelfTrainingAI()
+
+    # Simulate logging new task usage (simulate live execution)
+    ai.log_interaction("Launch weather tool", "weather")
+    ai.log_interaction("Tell me something funny", "joke")
+    ai.log_interaction("Set a timer for 10 minutes", "timer")
+
+    # Train from logs
+    ai.train()
+
+    # Predict from new input
+    ai.predict("Will it rain tomorrow?")
+    ai.predict("Remind me in 30 minutes")
