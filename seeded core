@@ -495,3 +495,50 @@ if __name__ == "__main__":
 
     # Export logs for auditing
     print(core_node.export_logs())
+import time
+import gc
+import tracemalloc
+
+class SelfTrainingLoop:
+    def __init__(self, model, data_fetcher, performance_tracker):
+        self.model = model
+        self.data_fetcher = data_fetcher
+        self.performance_tracker = performance_tracker
+        self.iteration = 0
+        self.max_iterations = 100  # Adjustable
+        self.memory_threshold_mb = 300  # Memory usage cap
+
+    def run(self):
+        tracemalloc.start()
+        while self.iteration < self.max_iterations:
+            print(f"\n[TRAINING LOOP] Iteration {self.iteration + 1}")
+            data, labels = self.data_fetcher.fetch_training_data()
+            self.model.train_model(data, labels)
+
+            # Log performance after training
+            usage = self.performance_tracker.track_usage()
+            mem_current, mem_peak = tracemalloc.get_traced_memory()
+            mem_usage_mb = mem_peak / 1024 / 1024
+            print(f"[MEMORY] Current: {mem_current/1024/1024:.2f} MB | Peak: {mem_usage_mb:.2f} MB")
+
+            # Check memory safety
+            if mem_usage_mb > self.memory_threshold_mb:
+                print("[WARNING] Memory usage exceeded threshold. Triggering garbage collection...")
+                gc.collect()
+                tracemalloc.reset_peak()
+
+            self.iteration += 1
+            time.sleep(1)
+
+        tracemalloc.stop()
+        print("[TRAINING LOOP] Complete.")
+
+# Example utility modules
+class MockDataFetcher:
+    def fetch_training_data(self):
+        return ["optimize memory", "boost speed", "reduce load"], ["memory", "speed", "load"]
+
+class PerformanceTracker:
+    def track_usage(self):
+        print("[PERFORMANCE] Logging simulated performance.")
+        return True
