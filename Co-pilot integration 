@@ -1,0 +1,17 @@
+copilot_integration/
+├── README.md                        # Overview of Copilot's role and integration logic
+├── config/
+│   └── copilot_config.yaml          # Settings for Copilot's behavior, UI control, and bridge logic
+├── api/
+│   ├── copilot_interface.py         # Main API entry point for Copilot
+│   └── dispatcher.py                # Routes prompts to different algorithms
+├── ui/
+│   └── copilot_ui_controller.py     # Handles user interface logic and Copilot-driven flow
+├── bridge/
+│   └── algorithm_bridge.py          # Executes multiple algorithms on same prompt
+├── blockchain/
+│   └── heritage_registry.py         # Logs execution traces and algorithm metadata to blockchain
+├── logs/
+│   └── copilot_execution.log        # Execution trace for Copilot's decisions
+└── utils/
+    └── prompt_parser.py             # Parses and normalizes user prompts
