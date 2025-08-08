@@ -1,0 +1,61 @@
+# copilot_integration/blockchain/master_key.py
+from dataclasses import dataclass
+from typing import Dict, Any
+import hashlib, hmac, json, time
+
+@dataclass
+class MKIHeader:
+    version: int
+    grammar_hash: str
+    epoch: int
+    root_pubkey: str  # exportable
+
+class MasterKeyInterpreter:
+    def __init__(self, root_secret: bytes):
+        self.root_secret = root_secret
+
+    def derive_key(self, path: str) -> bytes:
+        # Simple HMAC-based derivation: m/role/module
+        return hmac.new(self.root_secret, path.encode(), hashlib.sha256).digest()
+
+    def sign(self, payload: Dict[str, Any], role_path: str) -> str:
+        key = self.derive_key(role_path)
+        msg = json.dumps(payload, sort_keys=True).encode()
+        return hmac.new(key, msg, hashlib.sha256).hexdigest()
+
+    def verify(self, payload: Dict[str, Any], signature: str, role_path: str) -> bool:
+        return self.sign(payload, role_path) == signature
+
+def hash_grammar(grammar_spec: Dict[str, Any]) -> str:
+    blob = json.dumps(grammar_spec, sort_keys=True).encode()
+    return hashlib.sha256(blob).hexdigest()
+# copilot_integration/protocol/tile_protocol.py
+from dataclasses import dataclass
+from typing import List, Dict
+
+EMO = {"happy":"H","sad":"S","mad":"M","anxious":"A","excited":"E","depressed":"D"}
+ATT = {"aggressive":"A","agitated":"G","thoughtful":"T","inconsiderate":"I","studious":"S","focused":"F","weird":"W","cool":"C"}
+BEH = {"focused":"f","irresponsible":"i","curious":"c","detached":"d","empathetic":"e","distracted":"x","analytical":"a"}
+
+@dataclass
+class TileAddress:
+    code: str
+    mki_version: int
+    signature: str  # provenance
+
+class TileEncoderV2:
+    def __init__(self, mki_version: int, signer):
+        self.mki_version = mki_version
+        self.signer = signer  # MasterKeyInterpreter.sign
+
+    def encode(self, primary_emotion: str, interpreted_emotion: str, version: int,
+               attitude: str, agitation_grade: int, behavior_traits: List[str], index: int,
+               field: str = None) -> TileAddress:
+        ee = EMO.get(primary_emotion.lower(), "X")
+        ee2 = EMO.get(interpreted_emotion.lower(), ee)
+        aa = ATT.get(attitude.lower(), "U")
+        bb = "".join(BEH.get(b.lower(), "u") for b in behavior_traits)
+        code = f"{ee}.{ee2}.{version}.{aa}'{agitation_grade}.{bb}.{index}"
+        payload = {"code": code, "mki_version": self.mki_version, "field": field or ""}
+        sig = self.signer(payload, role_path="m/HeadAPI")
+        return TileAddress(code=code, mki_version=self.mki_version, signature=sig)
