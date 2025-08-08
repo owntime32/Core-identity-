@@ -274,3 +274,38 @@ class PathwayConfigurator:
             return
         print(f"[DISPATCH] Dispatching pathway '{pathway['name']}' to orchestrator.")
         orchestrator.execute_pathway(pathway, agent_registry)
+# copilot_integration/api/dispatcher.py
+
+from copilot_integration.bridge.algorithm_bridge import run_bridge
+from copilot_integration.ui.copilot_ui_controller import update_ui
+from your_system.linear_launcher import LinearPathwayLauncher
+from your_system.tiles import Tile
+
+def dispatch_prompt(parsed_prompt: dict, mode: str = "bridge"):
+    if mode == "linear":
+        print("[DISPATCH] Routing to Executive Director (LinearPathwayLauncher)")
+        tiles = build_tiles_from_prompt(parsed_prompt)
+        launcher = LinearPathwayLauncher(tiles)
+        launcher.launch()
+        return "Executed via Executive Director"
+
+    elif mode == "parallel":
+        print("[DISPATCH] Routing to Parallel Orchestrator")
+        # Assume orchestrator is initialized elsewhere
+        return orchestrator.launch_parallel_pathways(parsed_prompt["raw"])
+
+    elif mode == "bridge":
+        print("[DISPATCH] Routing through Algorithm Bridge")
+        return run_bridge(parsed_prompt["raw"])
+
+    else:
+        print("[DISPATCH] Unknown mode. Defaulting to bridge.")
+        return run_bridge(parsed_prompt["raw"])
+
+def build_tiles_from_prompt(parsed_prompt: dict):
+    # Placeholder logic to convert parsed prompt into tile sequence
+    steps = parsed_prompt.get("steps", ["Initialize", "Process", "Complete"])
+    tiles = []
+    for i, step in enumerate(steps):
+        tiles.append(Tile(x=i, y=0, command=lambda: print(f"Executing step: {step}")))
+    return tiles
