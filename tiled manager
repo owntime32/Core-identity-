@@ -33,3 +33,18 @@ class SmartTile:
 def optimize_memory(context):
     print("Optimizing memory with parameters:", context.get("memory_profile"))
     return {"status": "optimized"}
+class TileEncoder:
+    def __init__(self):
+        self.emotion_map = {
+            "happy": "H", "sad": "S", "mad": "M",
+            "anxious": "A", "excited": "E", "depressed": "D"
+        }
+
+    def encode_tile(self, prompt: str, primary_emotion: str, interpreted_emotion: str, field: str, index: int, version: int = 1):
+        primary_code = self.emotion_map.get(primary_emotion.lower(), "X")
+        interpreted_code = self.emotion_map.get(interpreted_emotion.lower(), primary_code)
+        emotion_pair = f"{primary_code}{interpreted_code}"
+
+        field_code = field.upper()[0]  # Simplified for now
+        tile_code = f"{emotion_pair}.{version}.{field_code}.{index}"
+        return tile_code
