@@ -272,5 +272,40 @@ for step in pathway_steps:
     print(step)
 
 interaction_logger.export_logs()
+# copilot_integration/api/copilot_interface.py
+
+from copilot_integration.utils.prompt_parser import parse_prompt
+from copilot_integration.api.dispatcher import dispatch_prompt
+from copilot_integration.blockchain.heritage_registry import log_execution
+import yaml
+import os
+
+class CopilotInterface:
+    def __init__(self, config_path="copilot_integration/config/copilot_config.yaml"):
+        with open(config_path, "r") as f:
+            self.config = yaml.safe_load(f)
+        self.mode = self.config.get("default_mode", "bridge")
+        self.ui_behavior = self.config.get("ui_behavior", {})
+        self.execution_log = []
+
+    def receive_prompt(self, user_input: str):
+        print(f"[COPILOT] Received prompt: {user_input}")
+        parsed = parse_prompt(user_input)
+        result = dispatch_prompt(parsed, mode=self.mode)
+        self.execution_log.append(result)
+
+        # Log to blockchain
+        log_execution(prompt=user_input, result=result, algorithm=self.mode)
+
+        # Modify UI if needed
+        self._update_ui(user_input, result)
+
+        return result
+
+    def _update_ui(self, prompt, result):
+        if self.ui_behavior.get("show_summary", True):
+            print(f"[UI] Summary: Copilot interpreted '{prompt}' and executed using '{self.mode}' mode.")
+        if self.ui_behavior.get("show_raw_output", False):
+            print(f"[UI] Raw Output: {result}")
 
 
