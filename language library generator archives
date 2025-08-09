@@ -361,3 +361,57 @@ class ToolboxLibrary:
             archive = json.load(f)
         self.tools = [PerformanceTool.from_dict(data) for data in archive]
         print(f"[IMPORT] Toolbox archive loaded from {file_path}")
+# copilot_integration/insight/empathy_model.py
+from typing import Dict
+
+def infer_ean(features: Dict[str, float]) -> Dict[str, str]:
+    # features: sentiment, arousal, valence, keywords, pacing, uncertainty, etc.
+    e = "anxious" if features.get("uncertainty",0)>0.7 else "mad" if features.get("anger",0)>0.6 else "thoughtful"
+    a = "agitated" if features.get("arousal",0)>0.6 else "thoughtful"
+    traits = []
+    if features.get("focus",0)>0.7: traits.append("focused")
+    if features.get("impulsivity",0)>0.6: traits.append("irresponsible")
+    if not traits: traits.append("curious")
+    return {"emotion": e, "attitude": a, "traits": traits}# copilot_integration/storage/tile_record.py
+from dataclasses import dataclass
+from typing import List, Dict
+
+@dataclass
+class TileRecord:
+    address: str            # C.A. code
+    mki_version: int
+    field: str
+    content_hash: str       # chat or prompt hash
+    perceptions: List[Dict] # list of PerceptionDelta summaries
+    canonical_state: Dict   # aggregated E-A-N state
+    merkle_proof: str       # link to on-chain epoch
+    signature: str          # Head API signature# copilot_integration/protocol/tile_protocol.py
+from dataclasses import dataclass
+from typing import List, Dict
+
+EMO = {"happy":"H","sad":"S","mad":"M","anxious":"A","excited":"E","depressed":"D"}
+ATT = {"aggressive":"A","agitated":"G","thoughtful":"T","inconsiderate":"I","studious":"S","focused":"F","weird":"W","cool":"C"}
+BEH = {"focused":"f","irresponsible":"i","curious":"c","detached":"d","empathetic":"e","distracted":"x","analytical":"a"}
+
+@dataclass
+class TileAddress:
+    code: str
+    mki_version: int
+    signature: str  # provenance
+
+class TileEncoderV2:
+    def __init__(self, mki_version: int, signer):
+        self.mki_version = mki_version
+        self.signer = signer  # MasterKeyInterpreter.sign
+
+    def encode(self, primary_emotion: str, interpreted_emotion: str, version: int,
+               attitude: str, agitation_grade: int, behavior_traits: List[str], index: int,
+               field: str = None) -> TileAddress:
+        ee = EMO.get(primary_emotion.lower(), "X")
+        ee2 = EMO.get(interpreted_emotion.lower(), ee)
+        aa = ATT.get(attitude.lower(), "U")
+        bb = "".join(BEH.get(b.lower(), "u") for b in behavior_traits)
+        code = f"{ee}.{ee2}.{version}.{aa}'{agitation_grade}.{bb}.{index}"
+        payload = {"code": code, "mki_version": self.mki_version, "field": field or ""}
+        sig = self.signer(payload, role_path="m/HeadAPI")
+        return TileAddress(code=code, mki_version=self.mki_version, signature=sig)
