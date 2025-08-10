@@ -17,59 +17,477 @@
            ┌───────────────────────────┐      │
            │ Machine Learning Diagnostic│─────┘
            └───────────────────────────┘
-from core.monitor import DataLoadMonitor
-from core.optimizer import ConfigOptimizer
-from core.database import CentralDatabase
+# central_database.py
+# Central Tiled Database: governance-driven, compressed batches, dynamic fusion
+from __future__ import annotations
+import os, io, time, json, sqlite3, hashlib, struct, threading
+from dataclasses import dataclass
+from typing import Iterable, Dict, Any, List, Optional, Tuple
 
-# Define your candidate configurations
-configs = [
-    {'name': 'small_cache', 'cache_size': 128, 'cpu_weight': 1.0, 'mem_weight': 0.5},
-    {'name': 'medium_cache','cache_size': 512, 'cpu_weight': 0.7, 'mem_weight': 0.3},
-    {'name': 'large_cache', 'cache_size': 1024,'cpu_weight': 0.5, 'mem_weight': 0.1},
-]
+try:
+    import zstandard as zstd  # pip install zstandard
+    ZSTD_AVAILABLE = True
+except Exception:
+    ZSTD_AVAILABLE = False
 
-monitor   = DataLoadMonitor(sample_interval=5)
-optimizer = ConfigOptimizer(configs)
-database  = CentralDatabase()
+###############################################################################
+# Utilities
+###############################################################################
 
-while True:
-    metrics    = monitor.collect()
-    new_config = optimizer.suggest(metrics)
-    if new_config:
-        database.apply_config(new_config)
-# core/optimizer.py
-class ConfigOptimizer:
-    def __init__(self, configs):
-        self.configs = configs
-        self.current = configs[0]
+def now_ms() -> int:
+    return int(time.time() * 1000)
 
-    def score(self, config, metrics):
-        # Example: weight CPU usage vs. memory footprint
-        score = metrics['cpu_percent'] * config['cpu_weight'] + \
-                metrics['memory_rss'] * config['mem_weight']
-        return score
+def blake3_like(data: bytes) -> str:
+    # Use sha256 as portable default; swap to blake3 for speed/strength if available
+    return hashlib.sha256(data).hexdigest()
 
-    def suggest(self, metrics):
-        best = min(self.configs, key=lambda c: self.score(c, metrics))
-        return best if best != self.current else None
-# core/monitor.py
-import psutil, tracemalloc
-import time
+###############################################################################
+# Data classes
+###############################################################################
 
-class DataLoadMonitor:
-    def __init__(self, sample_interval=5):
-        self.interval = sample_interval
-        tracemalloc.start()
+@dataclass(frozen=True)
+class RDObject:
+    rd_id: str
+    kind: str           # code|data|signal|diagnostic
+    media: str          # mime/subtype, e.g., text/x-python
+    payload: bytes
+    meta: Dict[str, Any]
 
-    def collect(self):
-        snapshot = tracemalloc.take_snapshot()
-        current, peak = tracemalloc.get_traced_memory()
-        metrics = {
-            'cpu_percent': psutil.cpu_percent(),
-            'memory_rss': psutil.Process().memory_info().rss,
-            'tracemalloc_current': current,
-            'tracemalloc_peak': peak,
-            # Add throughput or latency metrics here
+@dataclass(frozen=True)
+class ThreadRef:
+    thread_id: str
+    label: Optional[str] = None
+
+###############################################################################
+# Index (SQLite) Layer
+###############################################################################
+
+class IndexDB:
+    def __init__(self, path: str):
+        self.path = path
+        self._conn = sqlite3.connect(path, check_same_thread=False)
+        self._conn.execute("PRAGMA journal_mode=WAL;")
+        self._conn.execute("PRAGMA synchronous=NORMAL;")
+        self._lock = threading.RLock()
+        self._init_schema()
+
+    def _init_schema(self):
+        schema_sql = open(__file__, "rb").read().decode("utf-8") if False else ""
+        with self._lock, self._conn:
+            self._conn.executescript("""
+            CREATE TABLE IF NOT EXISTS rd_objects (
+              rd_id TEXT PRIMARY KEY,
+              kind TEXT NOT NULL,
+              media TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              size_bytes INTEGER NOT NULL,
+              checksum TEXT NOT NULL,
+              meta_json TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS batches (
+              batch_id TEXT PRIMARY KEY,
+              codec TEXT NOT NULL,
+              path TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              count INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS batch_index (
+              batch_id TEXT NOT NULL,
+              rd_id TEXT NOT NULL,
+              offset INTEGER NOT NULL,
+              length INTEGER NOT NULL,
+              PRIMARY KEY (batch_id, rd_id)
+            );
+            CREATE TABLE IF NOT EXISTS threads (
+              thread_id TEXT PRIMARY KEY,
+              label TEXT,
+              created_at INTEGER NOT NULL,
+              score REAL DEFAULT 0.0
+            );
+            CREATE TABLE IF NOT EXISTS thread_membership (
+              thread_id TEXT NOT NULL,
+              rd_id TEXT NOT NULL,
+              ord INTEGER NOT NULL,
+              PRIMARY KEY (thread_id, ord),
+              UNIQUE (thread_id, rd_id)
+            );
+            CREATE TABLE IF NOT EXISTS fusions (
+              fusion_id TEXT PRIMARY KEY,
+              created_at INTEGER NOT NULL,
+              policy TEXT NOT NULL,
+              result_thread_id TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS lineage (
+              parent_thread_id TEXT NOT NULL,
+              child_thread_id TEXT NOT NULL,
+              relation TEXT NOT NULL,
+              fusion_id TEXT,
+              PRIMARY KEY (parent_thread_id, child_thread_id, relation)
+            );
+            CREATE TABLE IF NOT EXISTS governance_policy (
+              policy_id TEXT PRIMARY KEY,
+              created_at INTEGER NOT NULL,
+              policy_json TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS governance_audit (
+              audit_id INTEGER PRIMARY KEY AUTOINCREMENT,
+              created_at INTEGER NOT NULL,
+              actor TEXT NOT NULL,
+              action TEXT NOT NULL,
+              before_json TEXT,
+              after_json TEXT
+            );
+            CREATE TABLE IF NOT EXISTS metrics (
+              ts INTEGER NOT NULL,
+              metric TEXT NOT NULL,
+              value REAL NOT NULL,
+              PRIMARY KEY (ts, metric)
+            );
+            CREATE TABLE IF NOT EXISTS configs (
+              cfg_id TEXT PRIMARY KEY,
+              created_at INTEGER NOT NULL,
+              active INTEGER NOT NULL DEFAULT 0,
+              cfg_json TEXT NOT NULL
+            );
+            """)
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_batch_index_rd ON batch_index(rd_id);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_thread_membership_rd ON thread_membership(rd_id);")
+
+    def upsert_rd(self, obj: RDObject):
+        with self._lock, self._conn:
+            self._conn.execute("""
+                INSERT OR IGNORE INTO rd_objects
+                (rd_id, kind, media, created_at, size_bytes, checksum, meta_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (obj.rd_id, obj.kind, obj.media, now_ms(), len(obj.payload),
+                  obj.rd_id, json.dumps(obj.meta)))
+
+    def add_batch(self, batch_id: str, codec: str, path: str, count: int):
+        with self._lock, self._conn:
+            self._conn.execute("""
+                INSERT INTO batches (batch_id, codec, path, created_at, count)
+                VALUES (?, ?, ?, ?, ?)
+            """, (batch_id, codec, path, now_ms(), count))
+
+    def add_batch_index(self, batch_id: str, entries: List[Tuple[str, int, int]]):
+        with self._lock, self._conn:
+            self._conn.executemany("""
+                INSERT INTO batch_index (batch_id, rd_id, offset, length)
+                VALUES (?, ?, ?, ?)
+            """, [(batch_id, rd, off, ln) for rd, off, ln in entries])
+
+    def create_thread(self, label: Optional[str] = None) -> ThreadRef:
+        tid = f"t_{hashlib.md5(os.urandom(8)).hexdigest()}"
+        with self._lock, self._conn:
+            self._conn.execute("""
+                INSERT INTO threads (thread_id, label, created_at) VALUES (?, ?, ?)
+            """, (tid, label, now_ms()))
+        return ThreadRef(thread_id=tid, label=label)
+
+    def add_thread_members(self, thread_id: str, rd_ids: List[str]):
+        with self._lock, self._conn:
+            for i, rd in enumerate(rd_ids):
+                self._conn.execute("""
+                    INSERT OR IGNORE INTO thread_membership (thread_id, rd_id, ord)
+                    VALUES (?, ?, ?)
+                """, (thread_id, rd, i))
+
+    def record_fusion(self, policy: str, result_thread_id: str,
+                      parents: List[str]) -> str:
+        fid = f"f_{hashlib.md5(os.urandom(8)).hexdigest()}"
+        with self._lock, self._conn:
+            self._conn.execute("""
+                INSERT INTO fusions (fusion_id, created_at, policy, result_thread_id)
+                VALUES (?, ?, ?, ?)
+            """, (fid, now_ms(), policy, result_thread_id))
+            for p in parents:
+                self._conn.execute("""
+                    INSERT OR IGNORE INTO lineage (parent_thread_id, child_thread_id, relation, fusion_id)
+                    VALUES (?, ?, 'merged_into', ?)
+                """, (p, result_thread_id, fid))
+        return fid
+
+    def set_policy(self, policy: Dict[str, Any]) -> str:
+        pid = f"pol_{hashlib.md5(json.dumps(policy, sort_keys=True).encode()).hexdigest()}"
+        with self._lock, self._conn:
+            self._conn.execute("""
+                INSERT OR REPLACE INTO governance_policy (policy_id, created_at, policy_json)
+                VALUES (?, ?, ?)
+            """, (pid, now_ms(), json.dumps(policy)))
+        return pid
+
+    def audit(self, actor: str, action: str, before: Any, after: Any):
+        with self._lock, self._conn:
+            self._conn.execute("""
+                INSERT INTO governance_audit (created_at, actor, action, before_json, after_json)
+                VALUES (?, ?, ?, ?, ?)
+            """, (now_ms(), actor, action,
+                  json.dumps(before) if before is not None else None,
+                  json.dumps(after) if after is not None else None))
+
+    def metrics(self, points: Dict[str, float]):
+        with self._lock, self._conn:
+            for k, v in points.items():
+                self._conn.execute("""
+                    INSERT OR REPLACE INTO metrics (ts, metric, value) VALUES (?, ?, ?)
+                """, (now_ms(), k, float(v)))
+
+###############################################################################
+# Storage: Compressed Batches
+###############################################################################
+
+class BatchWriter:
+    MAGIC = b"RDBATCH\x00"
+    HEADER_STRUCT = struct.Struct("<Q")  # number of entries
+
+    def __init__(self, codec: str = "zstd", level: int = 3):
+        self.codec = codec
+        self.level = level
+
+    def write(self, path: str, items: List[RDObject]) -> Tuple[str, List[Tuple[str, int, int]]]:
+        # Simple contiguous archive: MAGIC | HEADER(count) | [len|rd_id|payload]...
+        buf = io.BytesIO()
+        buf.write(self.MAGIC)
+        buf.write(self.HEADER_STRUCT.pack(len(items)))
+        index: List[Tuple[str, int, int]] = []
+
+        for obj in items:
+            start = buf.tell()
+            rd_id_b = obj.rd_id.encode()
+            payload = obj.payload
+            buf.write(struct.pack("<I", len(rd_id_b)))
+            buf.write(rd_id_b)
+            buf.write(struct.pack("<I", len(payload)))
+            buf.write(payload)
+            end = buf.tell()
+            index.append((obj.rd_id, start, end - start))
+
+        raw = buf.getvalue()
+        if self.codec == "zstd" and ZSTD_AVAILABLE:
+            cctx = zstd.ZstdCompressor(level=self.level)
+            compressed = cctx.compress(raw)
+            with open(path, "wb") as f:
+                f.write(compressed)
+        else:
+            with open(path, "wb") as f:
+                f.write(raw)
+        batch_id = f"b_{hashlib.md5(os.urandom(8)).hexdigest()}"
+        return batch_id, index
+
+class BatchReader:
+    def __init__(self, codec: str = "zstd"):
+        self.codec = codec
+
+    def read_slice(self, path: str, offset: int, length: int) -> Tuple[str, bytes]:
+        with open(path, "rb") as f:
+            blob = f.read()
+        if self.codec == "zstd" and ZSTD_AVAILABLE:
+            dctx = zstd.ZstdDecompressor()
+            raw = dctx.decompress(blob)
+        else:
+            raw = blob
+        segment = raw[offset:offset+length]
+        # parse one record (rd_id, payload)
+        mv = memoryview(segment)
+        rdid_len = struct.unpack_from("<I", mv, 0)[0]
+        pos = 4
+        rd_id = bytes(mv[pos:pos+rdid_len]).decode(); pos += rdid_len
+        payload_len = struct.unpack_from("<I", mv, pos)[0]; pos += 4
+        payload = bytes(mv[pos:pos+payload_len])
+        return rd_id, payload
+
+###############################################################################
+# Fusion Engine (Similarity + Dedup + Lineage)
+###############################################################################
+
+class FusionEngine:
+    def __init__(self, index: IndexDB):
+        self.index = index
+
+    @staticmethod
+    def _signature(obj: RDObject) -> str:
+        # Structure-aware lightweight signature: kind|media|hash(payload)
+        return f"{obj.kind}|{obj.media}|{blake3_like(obj.payload)}"
+
+    def deduplicate(self, objs: Iterable[RDObject]) -> List[RDObject]:
+        seen = set()
+        uniq = []
+        for o in objs:
+            sig = self._signature(o)
+            if sig in seen:
+                continue
+            seen.add(sig)
+            uniq.append(o)
+        return uniq
+
+    def fuse_threads(self, policy: Dict[str, Any], threads: List[ThreadRef]) -> ThreadRef:
+        # Simple fusion: concatenate members, then dedup by RDObject hash while preserving order
+        conn = self.index._conn
+        cur = conn.cursor()
+        rd_seq: List[str] = []
+        for t in threads:
+            cur.execute("SELECT rd_id FROM thread_membership WHERE thread_id=? ORDER BY ord ASC", (t.thread_id,))
+            rd_seq.extend([r[0] for r in cur.fetchall()])
+        # Stable order, set-based compaction
+        seen = set(); fused_seq = []
+        for rd in rd_seq:
+            if rd in seen: continue
+            seen.add(rd); fused_seq.append(rd)
+
+        result = self.index.create_thread(label="fused")
+        self.index.add_thread_members(result.thread_id, fused_seq)
+        pol_id = self.index.set_policy(policy)
+        self.index.record_fusion(policy=pol_id, result_thread_id=result.thread_id,
+                                 parents=[t.thread_id for t in threads])
+        return result
+
+###############################################################################
+# Governance Controller (Policies, Scoring, Reconfiguration)
+###############################################################################
+
+class GovernanceController:
+    def __init__(self, index: IndexDB):
+        self.index = index
+        self.active_cfg: Dict[str, Any] = {
+            "cache_mb": 256,
+            "batch_max_count": 2000,
+            "fusion_similarity_threshold": 0.85,
+            "reconfig_interval_ms": 10_000,
+            "sandbox_redactions": ["payload"],  # outbound interpretations drop raw payloads
+            "codec": "zstd",
+            "zstd_level": 6
         }
-        time.sleep(self.interval)
-        return metrics
+        self.index.audit("governance", "init_config", None, self.active_cfg)
+
+    def score(self, metrics: Dict[str, float]) -> float:
+        # Lower is better: weighted sum
+        cpu = metrics.get("cpu", 0.0)
+        mem = metrics.get("mem", 0.0)
+        lat = metrics.get("latency_p95", 0.0)
+        miss = metrics.get("cache_miss_rate", 0.0)
+        return 0.4*cpu + 0.3*mem + 0.2*lat + 0.1*miss
+
+    def maybe_reconfigure(self, metrics: Dict[str, float]) -> Optional[Dict[str, Any]]:
+        current = self.active_cfg.copy()
+        s = self.score(metrics)
+        # Simple heuristic: if mem high, shrink cache; if latency high, bump cache
+        changed = False
+        if metrics.get("mem", 0) > 0.85 and current["cache_mb"] > 128:
+            current["cache_mb"] = max(128, current["cache_mb"] - 64); changed = True
+        if metrics.get("latency_p95", 0) > 0.5 and current["cache_mb"] < 1024:
+            current["cache_mb"] = min(1024, current["cache_mb"] + 64); changed = True
+        if changed:
+            self.index.audit("governance", "reconfigure", self.active_cfg, current)
+            self.active_cfg = current
+            return current
+        return None
+
+    def outbound_interpretation(self, obj: RDObject) -> Dict[str, Any]:
+        # One-way sandboxed view (payload redacted)
+        view = {
+            "rd_id": obj.rd_id,
+            "kind": obj.kind,
+            "media": obj.media,
+            "meta": obj.meta,
+            "ts": now_ms()
+        }
+        return view
+
+###############################################################################
+# Central Database (Public API)
+###############################################################################
+
+class CentralDatabase:
+    def __init__(self, db_path: str, storage_dir: str):
+        os.makedirs(storage_dir, exist_ok=True)
+        self.index = IndexDB(db_path)
+        self.gov = GovernanceController(self.index)
+        self.storage_dir = storage_dir
+        self.reader = BatchReader(codec=self.gov.active_cfg["codec"])
+
+    def ingest_batch(self, items: List[Tuple[str, str, bytes, Dict[str, Any]]]) -> str:
+        # items: [(kind, media, payload, meta)]
+        rd_objs: List[RDObject] = []
+        for kind, media, payload, meta in items:
+            rd_id = blake3_like(payload)  # content-addressed uniqueness
+            rd_objs.append(RDObject(rd_id=rd_id, kind=kind, media=media, payload=payload, meta=meta))
+
+        # deduplicate at ingest boundary
+        fuse = FusionEngine(self.index)
+        unique_objs = fuse.deduplicate(rd_objs)
+
+        # upsert index entries without payload storage duplication
+        for obj in unique_objs:
+            self.index.upsert_rd(obj)
+
+        # write compressed batch
+        writer = BatchWriter(codec=self.gov.active_cfg["codec"], level=self.gov.active_cfg["zstd_level"])
+        batch_path = os.path.join(self.storage_dir, f"batch_{int(time.time())}.rdbz")
+        batch_id, idx = writer.write(batch_path, unique_objs)
+        self.index.add_batch(batch_id, self.gov.active_cfg["codec"], batch_path, count=len(unique_objs))
+        self.index.add_batch_index(batch_id, idx)
+        return batch_id
+
+    def fetch_rd(self, rd_id: str) -> Optional[RDObject]:
+        cur = self.index._conn.cursor()
+        # find where this rd_id lives
+        cur.execute("""
+            SELECT b.path, b.codec, bi.offset, bi.length, o.kind, o.media, o.meta_json
+            FROM batch_index bi
+            JOIN batches b ON b.batch_id = bi.batch_id
+            JOIN rd_objects o ON o.rd_id = bi.rd_id
+            WHERE bi.rd_id=?
+            LIMIT 1
+        """, (rd_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        path, codec, off, ln, kind, media, meta_json = row
+        reader = BatchReader(codec=codec)
+        _, payload = reader.read_slice(path, off, ln)
+        return RDObject(rd_id=rd_id, kind=kind, media=media, payload=payload, meta=json.loads(meta_json))
+
+    def create_thread_from_rds(self, rd_ids: List[str], label: Optional[str] = None) -> ThreadRef:
+        t = self.index.create_thread(label=label)
+        self.index.add_thread_members(t.thread_id, rd_ids)
+        return t
+
+    def fuse_threads(self, thread_ids: List[str], policy: Optional[Dict[str, Any]] = None) -> ThreadRef:
+        policy = policy or {"name": "default_fusion", "similarity_threshold": self.gov.active_cfg["fusion_similarity_threshold"]}
+        threads = [ThreadRef(tid) for tid in thread_ids]
+        engine = FusionEngine(self.index)
+        return engine.fuse_threads(policy, threads)
+
+    def interpret_outbound(self, rd_id: str) -> Optional[Dict[str, Any]]:
+        obj = self.fetch_rd(rd_id)
+        if not obj:
+            return None
+        return self.gov.outbound_interpretation(obj)
+
+    def apply_config(self, cfg: Dict[str, Any]):
+        before = self.gov.active_cfg.copy()
+        self.gov.active_cfg.update(cfg)
+        self.index.audit("governance", "manual_reconfigure", before, self.gov.active_cfg)
+
+###############################################################################
+# Quick demo (optional)
+###############################################################################
+
+if __name__ == "__main__":
+    db = CentralDatabase(db_path="center.db", storage_dir="./storage")
+    batch = db.ingest_batch([
+        ("code", "text/x-python", b"print('hello')\n", {"tags": ["example"], "src": "userA"}),
+        ("code", "text/x-python", b"print('hello')\n", {"tags": ["duplicate"], "src": "userB"}),  # deduped
+        ("data", "application/json", b'{"k":1}', {"tags": ["kv"], "src": "sensor1"})
+    ])
+    print("Batch:", batch)
+
+    # Build threads, then fuse them
+    obj1 = db.fetch_rd(db.fetch_rd("".join([])) or "noop")  # no-op guard
+    cur = db.index._conn.cursor()
+    cur.execute("SELECT rd_id FROM rd_objects")
+    rds = [r[0] for r in cur.fetchall()]
+    t1 = db.create_thread_from_rds(rds[:2], label="alpha")
+    t2 = db.create_thread_from_rds(rds[1:], label="beta")
+    fused = db.fuse_threads([t1.thread_id, t2.thread_id])
+    print("Fused thread:", fused.thread_id)
