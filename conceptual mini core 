@@ -1,0 +1,106 @@
+# conceptual_mini_core.py
+
+import uuid
+import datetime
+from typing import List, Dict, Any
+
+# --- Data Structures ---
+
+class ConceptMotif:
+    def __init__(self, signature: str, concept_tags: List[str], novelty_score: float):
+        self.motif_id = str(uuid.uuid4())
+        self.signature = signature
+        self.concept_tags = concept_tags
+        self.novelty_score = novelty_score
+
+class DiagnosticLink:
+    def __init__(self, motif_id: str, behavior_id: str, trait_deltas: Dict[str, float], outcome_refs: List[str]):
+        self.link_id = str(uuid.uuid4())
+        self.motif_id = motif_id
+        self.behavior_id = behavior_id
+        self.trait_deltas = trait_deltas
+        self.outcome_refs = outcome_refs
+
+class ConceptTag:
+    def __init__(self, name: str, definition: str):
+        self.tag_id = str(uuid.uuid4())
+        self.name = name
+        self.definition = definition
+        self.linked_motifs = []
+        self.maturity_score = 0.0
+
+class Footnote:
+    def __init__(self, motif_id: str, projected_outcome: str, confidence: float, inquiry_flag: bool):
+        self.note_id = str(uuid.uuid4())
+        self.motif_id = motif_id
+        self.timestamp = datetime.datetime.now()
+        self.projected_outcome = projected_outcome
+        self.confidence = confidence
+        self.inquiry_flag = inquiry_flag
+
+class ConceptualSnapshot:
+    def __init__(self, user_id: str, active_tags: List[str], motif_history: List[str]):
+        self.snapshot_id = str(uuid.uuid4())
+        self.user_id = user_id
+        self.timestamp = datetime.datetime.now()
+        self.active_tags = active_tags
+        self.motif_history = motif_history
+
+# --- Core Engine ---
+
+class ConceptualMiniCore:
+    def __init__(self):
+        self.motifs = {}
+        self.diagnostics = {}
+        self.tags = {}
+        self.footnotes = {}
+        self.snapshots = {}
+
+    def create_motif(self, signature: str, concept_tags: List[str], novelty_score: float):
+        motif = ConceptMotif(signature, concept_tags, novelty_score)
+        self.motifs[motif.motif_id] = motif
+        for tag in concept_tags:
+            if tag in self.tags:
+                self.tags[tag].linked_motifs.append(motif.motif_id)
+        return motif.motif_id
+
+    def add_diagnostic_link(self, motif_id: str, behavior_id: str, trait_deltas: Dict[str, float], outcome_refs: List[str]):
+        link = DiagnosticLink(motif_id, behavior_id, trait_deltas, outcome_refs)
+        self.diagnostics[link.link_id] = link
+        return link.link_id
+
+    def define_concept_tag(self, name: str, definition: str):
+        tag = ConceptTag(name, definition)
+        self.tags[name] = tag
+        return tag.tag_id
+
+    def add_footnote(self, motif_id: str, projected_outcome: str, confidence: float, inquiry_flag: bool):
+        note = Footnote(motif_id, projected_outcome, confidence, inquiry_flag)
+        self.footnotes[note.note_id] = note
+        return note.note_id
+
+    def capture_snapshot(self, user_id: str, active_tags: List[str], motif_history: List[str]):
+        snapshot = ConceptualSnapshot(user_id, active_tags, motif_history)
+        self.snapshots[snapshot.snapshot_id] = snapshot
+        return snapshot.snapshot_id
+
+# --- Example Usage ---
+
+if __name__ == "__main__":
+    core = ConceptualMiniCore()
+
+    # Define tags
+    core.define_concept_tag("resilience", "Ability to recover from stress or failure")
+    core.define_concept_tag("recursive_thinking", "Looped logic patterns in decision-making")
+
+    # Create a motif
+    motif_id = core.create_motif("looped_response_to_stress", ["resilience", "recursive_thinking"], 0.87)
+
+    # Add diagnostic link
+    core.add_diagnostic_link(motif_id, "behavior_001", {"confidence": +0.2, "avoidance": -0.1}, ["outcome_001"])
+
+    # Add footnote
+    core.add_footnote(motif_id, "likely to adapt under pressure", 0.92, True)
+
+    # Capture snapshot
+    core.capture_snapshot("user_123", ["resilience"], [motif_id])
