@@ -1,0 +1,210 @@
+# behavior_mini_core.py
+from __future__ import annotations
+import time, json, sqlite3, math
+from dataclasses import dataclass
+from typing import Dict, Any, List, Optional, Tuple
+
+############################################
+# Config and governance
+############################################
+
+DEFAULT_POLICY = {
+    "behavior": {
+        "inactivity_close_hours": 24,
+        "abandoned": {"min_predicted_run": 10, "max_realized_run": 2},
+        "unexpected": {"U_threshold": 2.0},
+        "fluidity": {"weights": {"v": 0.4, "i": 0.4, "t": 0.2}}
+    },
+    "prediction": {"lambda_risk": 1.0, "calibration": "isotonic"},
+    "cohort": {"dimensions": ["tenure","topic","device","locale","hour"]},
+    "sandbox": {"redactions": ["payload"]},
+    "reconfig": {"interval_ms": 10000}
+}
+
+def now_ms() -> int: return int(time.time() * 1000)
+
+############################################
+# Storage (SQLite)
+############################################
+
+class BehaviorDB:
+    def __init__(self, path: str):
+        self.conn = sqlite3.connect(path, check_same_thread=False)
+        self.conn.execute("PRAGMA journal_mode=WAL;")
+        self._init_schema()
+
+    def _init_schema(self):
+        cur = self.conn.cursor()
+        cur.executescript("""
+        CREATE TABLE IF NOT EXISTS events(
+          event_id TEXT PRIMARY KEY, user_id TEXT, r_d_addr TEXT, ts INTEGER,
+          prompt_raw TEXT, prompt_norm TEXT, slang_flags TEXT,
+          code_sig TEXT, exec_meta_json TEXT,
+          outcome_label TEXT, outcome_notes TEXT,
+          excitement REAL, volatility REAL, intent_shift REAL
+        );
+        CREATE TABLE IF NOT EXISTS features(
+          event_id TEXT PRIMARY KEY,
+          prompt_emb TEXT, code_emb TEXT, behavior_emb TEXT,
+          trend_tags TEXT, feature_version TEXT
+        );
+        CREATE TABLE IF NOT EXISTS sessions(
+          session_id TEXT PRIMARY KEY, user_id TEXT, start_ts INTEGER, end_ts INTEGER,
+          predicted_run_len REAL, realized_run_len INTEGER, inactivity_closed_ts INTEGER,
+          cluster_id TEXT, model_version TEXT
+        );
+        CREATE TABLE IF NOT EXISTS clusters(
+          cluster_id TEXT PRIMARY KEY, centroid_emb TEXT, concept_tags TEXT, stability REAL
+        );
+        CREATE TABLE IF NOT EXISTS behaviors(
+          behavior_id TEXT PRIMARY KEY, user_id TEXT, trait_vector TEXT,
+          state_label TEXT, fluidity REAL, behavior_tags TEXT, last_update INTEGER
+        );
+        CREATE TABLE IF NOT EXISTS predictions(
+          event_id TEXT PRIMARY KEY, p_success REAL, p_disaster REAL, pred_entropy REAL,
+          run_len_hat REAL, run_len_ci_low REAL, run_len_ci_high REAL,
+          gauge REAL, band TEXT, explainer TEXT
+        );
+        CREATE TABLE IF NOT EXISTS outcomes(
+          event_id TEXT PRIMARY KEY, outcome_score REAL, disaster_grade REAL,
+          feedback TEXT, return_within_T INTEGER, time_to_return INTEGER
+        );
+        CREATE TABLE IF NOT EXISTS error_background(
+          error_bg_id TEXT PRIMARY KEY, model_version TEXT, cohort_id TEXT,
+          mu_residual REAL, sigma_residual REAL, updated_at INTEGER, n INTEGER
+        );
+        CREATE TABLE IF NOT EXISTS unexpected_behavior(
+          ub_id TEXT PRIMARY KEY, session_id TEXT, user_id TEXT,
+          z_residual REAL, U REAL, anomaly_score REAL,
+          flags TEXT, model_version TEXT, cohort_id TEXT, created_at INTEGER
+        );
+        CREATE TABLE IF NOT EXISTS cohorts(
+          cohort_id TEXT PRIMARY KEY, definition_json TEXT, size INTEGER, last_updated INTEGER
+        );
+        """)
+        self.conn.commit()
+
+############################################
+# Core adapter (integration with central core)
+############################################
+
+class CoreAdapter:
+    def __init__(self, send_insight):
+        self.send_insight = send_insight  # callable(dict)
+
+    def emit_insight(self, data: Dict[str, Any]):
+        # Enforce sandboxed redactions here if needed
+        self.send_insight(data)
+
+############################################
+# Behavior engine
+############################################
+
+class BehaviorEngine:
+    def __init__(self, db: BehaviorDB, core: CoreAdapter, policy: Dict[str, Any] = None):
+        self.db = db
+        self.core = core
+        self.policy = policy or DEFAULT_POLICY
+        self.model_version = "v0"
+
+    # -------- Feature pipeline --------
+    def normalize_and_flag_slang(self, text: str) -> Tuple[str, Dict[str, Any]]:
+        # Placeholder: lowercase + simple heuristics
+        norm = text.strip().lower()
+        flags = {"shout": any(c.isupper() for c in text), "exclam": "!!" in text}
+        return norm, flags
+
+    def compute_scores(self, prompt: str, history_ctx: Dict[str, Any]) -> Tuple[float, float, float]:
+        excitement = min(1.0, 0.2 + 0.1*prompt.count("!") + 0.05*len(prompt.split()))
+        volatility = min(1.0, 0.5 * history_ctx.get("topic_switch_rate", 0.0))
+        intent_shift = min(1.0, history_ctx.get("intent_shift_rate", 0.0))
+        return excitement, volatility, intent_shift
+
+    def embed(self, prompt_norm: str, code_sig: str) -> Dict[str, List[float]]:
+        # Placeholder embeddings (use real models in prod)
+        def hv(s): return [float((sum(map(ord, s)) % 97))/97.0, float(len(s)%31)/31.0]
+        return {"prompt_emb": hv(prompt_norm), "code_emb": hv(code_sig),
+                "behavior_emb": [(hv(prompt_norm)[0]+hv(code_sig)[0])/2,
+                                 (hv(prompt_norm)[1]+hv(code_sig)[1])/2]}
+
+    # -------- Prediction --------
+    def predict(self, feats: Dict[str, Any]) -> Dict[str, Any]:
+        # Toy logic; replace with trained models
+        p_success = max(0.01, 0.7 - 0.3*feats["volatility"] + 0.2*feats["excitement"])
+        p_disaster = max(0.01, 0.2 + 0.6*feats["intent_shift"])
+        entropy = 0.5*(1 - abs(p_success - p_disaster))
+        run_len_hat = 8 + 10*feats["excitement"] - 6*feats["volatility"]
+        lam = self.policy["prediction"]["lambda_risk"]
+        gauge = p_success - lam * p_disaster
+        band = "green" if p_disaster < 0.10 else ("yellow" if p_disaster < 0.30 else "red")
+        return {
+            "p_success": min(0.99, p_success),
+            "p_disaster": min(0.99, p_disaster),
+            "pred_entropy": entropy,
+            "run_len_hat": max(0.0, run_len_hat),
+            "run_len_ci_low": max(0.0, run_len_hat - 2.0),
+            "run_len_ci_high": run_len_hat + 2.0,
+            "gauge": gauge, "band": band,
+            "explainer": "toy_model_v0"
+        }
+
+    # -------- Public API --------
+    def ingest_event(self, event_id: str, user_id: str, r_d_addr: str,
+                     prompt_raw: str, code_sig: str, exec_meta: Dict[str, Any]) -> Dict[str, Any]:
+        norm, slang = self.normalize_and_flag_slang(prompt_raw)
+        history_ctx = {"topic_switch_rate": exec_meta.get("topic_switch_rate", 0.0),
+                       "intent_shift_rate": exec_meta.get("intent_shift_rate", 0.0)}
+        excitement, volatility, intent_shift = self.compute_scores(norm, history_ctx)
+        embs = self.embed(norm, code_sig)
+        feats = {"excitement": excitement, "volatility": volatility, "intent_shift": intent_shift}
+        pred = self.predict({**feats})
+        # Persist
+        cur = self.db.conn.cursor()
+        cur.execute("""INSERT OR REPLACE INTO events VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (event_id, user_id, r_d_addr, now_ms(), prompt_raw, norm, json.dumps(slang),
+             code_sig, json.dumps(exec_meta), None, None, excitement, volatility, intent_shift))
+        cur.execute("""INSERT OR REPLACE INTO features VALUES (?,?,?,?,?,?)""",
+            (event_id, json.dumps(embs["prompt_emb"]), json.dumps(embs["code_emb"]),
+             json.dumps(embs["behavior_emb"]), json.dumps(exec_meta.get("trend_tags", [])), "v0"))
+        cur.execute("""INSERT OR REPLACE INTO predictions VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (event_id, pred["p_success"], pred["p_disaster"], pred["pred_entropy"],
+             pred["run_len_hat"], pred["run_len_ci_low"], pred["run_len_ci_high"],
+             pred["gauge"], pred["band"], pred["explainer"]))
+        self.db.conn.commit()
+        # Emit redacted insight
+        self.core.emit_insight({
+            "type": "behavior_prediction",
+            "rd_id": r_d_addr, "user_id": user_id,
+            "gauge": pred["gauge"], "risk_band": pred["band"],
+            "excitement": excitement, "volatility": volatility, "intent_shift": intent_shift,
+            "ts": now_ms()
+        })
+        return pred
+
+    def record_outcome(self, event_id: str, outcome_score: float, disaster_grade: float, feedback: str = ""):
+        cur = self.db.conn.cursor()
+        cur.execute("""INSERT OR REPLACE INTO outcomes VALUES (?,?,?,?,?,?)""",
+            (event_id, outcome_score, disaster_grade, feedback, None, None))
+        self.db.conn.commit()
+
+    def close_sessions_and_scan(self):
+        # Simplified scan: compute residuals using per-model aggregate
+        pol = self.policy["behavior"]
+        inactive_ms = pol["inactivity_close_hours"] * 3600 * 1000
+        now = now_ms()
+        # In production: select sessions to close; here we skip building sessions for brevity
+        # Compute unexpectedness and abandoned bursts per policy...
+        pass
+
+    def best_case_recommendations(self, context: Dict[str, Any]) -> List[Dict[str, Any]]:
+        # Rank candidate actions by Π = w1*G + w2*understanding + w3*compliance
+        w1, w2, w3 = 0.5, 0.3, 0.2
+        cands = context.get("candidates", [])
+        ranked = []
+        for c in cands:
+            G = c.get("gauge", 0.0)
+            U = c.get("understanding", 0.0)
+            C = c.get("compliance", 1.0)
+            pi = w1*G + w2*U + w3*C
+            ranked.append({**c, "priority_index": pi})
+        return sorted(ranked, key=lambda x: x["priority_index"], reverse=True)
