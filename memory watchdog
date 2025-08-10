@@ -1,0 +1,231 @@
+Memory-efficiency rails to keep the whole system upright
+
+You’re thinking like a systems architect who’s seen real fires. Let’s put rails on every edge: central core, minis, storage, and the pipes between them. The goal: graceful degradation, zero data loss, no “humpstack” blowups, and automatic recovery.
+
+---
+
+Why memory rails matter here
+
+- Central core fuses, indexes, and routes—any spike here ripples everywhere.
+- Minis run parallel learning loops—bursts and drift can create runaway growth.
+- Compressed batches and fusion must be streamable—no full-buffer expands.
+- Governance should translate pressure into policy: slow the firehose, compact more, and shed load intelligently.
+
+---
+
+Central core guardrails
+
+- Hard ceilings
+  - Max resident memory watermark (e.g., 75–85% of container limit).
+  - Max concurrent fusions and batch ingests.
+- Adaptive policy dials
+  - Raise compression level, shrink cachemb, increase sampling, lower batchmax_count under pressure.
+- Spill-first design
+  - Prefer spill-to-disk for large joins/fusions; keep hot indexes in memory only.
+- Isolation
+  - Run fusion and heavy analytics in separate worker processes; restartable without taking the core down.
+
+---
+
+Mini-core guardrails
+
+- Credit-based backpressure
+  - “Read” and “write” credits refresh each interval; spend credits per byte and per insight.
+- Size-aware learning
+  - Cap motif/concept library; promote only on novelty/utility thresholds.
+- Bounded queues
+  - Fixed-depth work queues; when full, switch to summary/delta mode.
+- Personalization shard limits
+  - Per-user caps with decay: old, low-utility state is compacted or archived.
+
+---
+
+Backpressure and load shedding
+
+- Token buckets on:
+  - Ingestion (R.D interpretations), fusion tasks, outbound insights.
+- Priority tiers
+  - Keep safety/compliance signals always admitted; defer low-priority enrichment.
+- Brownouts
+  - Temporarily disable expensive features (e.g., deep similarity) when RSS crosses a high watermark.
+- Admission control
+  - Probabilistic drop/sampling of low-utility inputs under extreme pressure.
+
+---
+
+Storage, cache, and compression
+
+- Stream, don’t slurp
+  - Zstd/LZ4 streaming; slice-by-offset reads; never fully decompress a batch in memory.
+- Content-addressed dedup
+  - Single canonical payload per unique content; references everywhere else.
+- Cache policy
+  - Byte-capped LRU with TinyLFU admission to avoid cache pollution.
+- Tiering
+  - Hot (RAM), warm (compressed files), cold (coalesced summaries); automatic demotion by recency and utility.
+
+---
+
+Observability and crash prevention
+
+- Metrics to watch
+  - RSS %, cache hit/miss, heap alloc rate, GC time, batch decompression time, queue depths, spill bytes, credit burn rate.
+- Health checks
+  - Liveness (event loop advancing), readiness (queue < threshold), memory headroom (> X%).
+- Watchdogs
+  - Kill/restart workers exceeding memory or time budgets; idempotent tasks with sequence numbers.
+- Telemetry hygiene
+  - Rate-limit logs/traces; drop verbose logs first under pressure.
+
+---
+
+Resilience patterns that matter
+
+- Idempotent writes and WAL
+  - Every state change replayable; avoid partial commits.
+- Checkpointing
+  - Periodic snapshots of policy, credits, and library registries.
+- Circuit breakers
+  - Trip on repeated timeouts between core and minis; exponential backoff with jitter.
+- Canary + rolling restarts
+  - Deploy features to a slice; roll forward only if KPIs stay green.
+
+---
+
+Python-level practices that save RAM
+
+- Use memoryviews and arrays for binary ops; avoid copying buffers.
+- Prefer iterators/generators; process in chunks.
+- Separate processes for heavy tasks; reclaim memory via OS on restart.
+- tracemalloc sampling and leak sentinels on hot paths.
+- Columnar on-disk formats for large tabular interim data; mmap when feasible.
+
+---
+
+Integration plan (phased)
+
+1. Instrumentation
+   - Add memory metrics, queue depths, and credit counters to core and minis.
+2. Policy hooks
+   - Wire governance dials: cachemb, batchmax_count, compression level, sampling rates.
+3. Backpressure
+   - Token buckets on ingress/egress; bounded queues with brownout switches.
+4. Spill + streaming
+   - Replace full-decompress with streaming slice reads; add spill-to-disk in fusion.
+5. Isolation
+   - Move fusion and heavy clustering to worker processes with watchdogs.
+6. Game day
+   - Chaos/load tests; verify brownouts, shedding, and recovery without data loss.
+
+---
+
+Code snippets you can drop in
+
+Memory watchdog (central core)
+
+`python
+import psutil, time, threading
+
+class MemWatchdog:
+    def init(self, high=0.80, critical=0.90, onhigh=None, oncrit=None):
+        self.high, self.crit = high, critical
+        self.onhigh, self.oncrit = onhigh, oncrit
+        self._stop = False
+
+    def start(self, interval=2.0):
+        t = threading.Thread(target=self._run, args=(interval,), daemon=True)
+        t.start()
+
+    def _run(self, interval):
+        p = psutil.Process()
+        while not self._stop:
+            rss = p.memory_info().rss
+            pct = rss / psutil.virtual_memory().total
+            if pct >= self.crit and self.oncrit: self.oncrit(rss, pct)
+            elif pct >= self.high and self.onhigh: self.onhigh(rss, pct)
+            time.sleep(interval)
+`
+
+Wire onhigh to: shrink cache, raise compression, enable sampling. Wire oncrit to: pause ingestion, flush queues to disk, kill/restart heavy workers.
+
+---
+
+Token-bucket backpressure
+
+`python
+import time
+
+class TokenBucket:
+    def init(self, ratepers, burst):
+        self.rate = ratepers; self.capacity = burst
+        self.tokens = burst; self.last = time.time()
+
+    def allow(self, cost=1):
+        now = time.time()
+        self.tokens = min(self.capacity, self.tokens + (now - self.last)*self.rate)
+        self.last = now
+        if self.tokens >= cost:
+            self.tokens -= cost
+            return True
+        return False
+`
+
+Use one per mini for reads/writes; cost proportional to bytes.
+
+---
+
+Spill-to-disk buffer
+
+`python
+import tempfile, os
+
+class SpillBuffer:
+    def init(self, maxmembytes=3210241024):
+        self.max = maxmembytes
+        self.buf = bytearray()
+        self.tmp = None
+
+    def append(self, chunk: bytes):
+        if self.tmp:
+            self.tmp.write(chunk)
+        elif len(self.buf) + len(chunk) <= self.max:
+            self.buf.extend(chunk)
+        else:
+            self.tmp = tempfile.TemporaryFile()
+            self.tmp.write(self.buf)
+            self.buf = bytearray()
+            self.tmp.write(chunk)
+
+    def read(self):
+        if self.tmp:
+            self.tmp.seek(0)
+            while True:
+                data = self.tmp.read(65536)
+                if not data: break
+                yield data
+            self.tmp.close()
+        else:
+            yield bytes(self.buf)
+        self.buf = bytearray(); self.tmp = None
+`
+
+---
+
+Streaming slice read (no full decompress)
+
+`python
+def readbatchslice(reader, path, offset, length):
+    # Reader should return a file-like iterator over decompressed bytes
+    it = reader.stream(path)
+    consumed = 0
+    for chunk in it:
+        if consumed + len(chunk) <= offset:
+            consumed += len(chunk); continue
+        start = max(0, offset - consumed)
+        end = min(len(chunk), start + (length - 0))
+        yield chunk[start:end]
+        consumed += len(chunk)
+        length -= (end - start)
+        if length <= 0: break
+`
+
