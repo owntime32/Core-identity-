@@ -72,4 +72,64 @@ from coreidentity.cpe import ControlPanelEntity
 
 cpe = ControlPanelEntity(core_id="CoreIdentity_Agent_001")
 result = cpe.evaluate_app("com.editor.app", "/path/to/editor.apk")
-print(result)
+print(result)class RollbackManager:
+    def __init__(self, db_path="cpe_archive.json"):
+        self.db_path = db_path
+
+    def load_db(self):
+        if not os.path.exists(self.db_path):
+            return []
+        with open(self.db_path, "r") as f:
+            return json.load(f)
+
+    def rollback(self, mode="previous_version"):
+        archive = self.load_db()
+        if not archive:
+            print("No archived configurations available.")
+            return None
+
+        if mode == "previous_version":
+            config = archive[-1]["fingerprints"]
+            print("Rolling back to previous saved version.")
+        elif mode == "original_version":
+            config = archive[0]["fingerprints"]
+            print("Rolling back to original clean slate.")
+        elif mode == "secure_mode":
+            config = self.generate_secure_config(archive[-1]["fingerprints"])
+            print("Rolling back to secure hardened configuration.")
+        else:
+            print("Invalid rollback mode.")
+            return None
+
+        self.apply_config(config)
+        return config
+
+    def generate_secure_config(self, current):
+        secure_config = current.copy()
+        # Example: disable risky modules, enforce strict drivers
+        secure_config["system_map"]["disabled_modules"] = ["telemetry", "third_party_plugins"]
+        secure_config["decision"]["security_mode"] = "hardened"
+        return secure_config
+
+    def apply_config(self, config):
+        # Placeholder: apply system settings, drivers, app configs
+        print("Applying configuration...")
+        # system.apply(config["system_map"])
+        # drivers.load(config["device_specs"])
+        # governor.enforce(config["decision"])
+from .rollback_manager import RollbackManager
+
+class ControlPanelEntity:
+    def __init__(self, core_id, db_path="cpe_archive.json"):
+        ...
+        self.rollback_manager = RollbackManager(db_path)
+
+    def rollback_system(self, mode="previous_version"):
+        config = self.rollback_manager.rollback(mode)
+        if config:
+            print("Rollback successful.")
+        else:
+            print("Rollback failed or unavailable.")
+cpe.rollback_system(mode="secure_mode")        # Hardened config
+cpe.rollback_system(mode="original_version")   # Clean slate
+cpe.rollback_system(mode="previous_version")   # Last good state
