@@ -1,135 +1,38 @@
-/coreidentity/
-├── cpe/
-│   ├── __init__.py
-│   ├── config.json
-│   ├── device_specs.py
-│   ├── system_mapper.py
-│   ├── synastry_engine.py
-│   ├── upload_simulator.py
-│   ├── fix_tester.py
-│   └── governor.pyfrom .device_specs import get_device_specs
-from .system_mapper import map_system
-from .synastry_engine import analyze_app_synastry
-from .upload_simulator import simulate_upload
-from .fix_tester import test_fixes
-from .governor import enforce_policy
+sentinel_system/
+├── core/
+│   └── sentinel_core.py
+├── control_panel/
+│   └── control_panel_entity.py
+├── modules/
+│   ├── media_access_manager.py
+│   ├── snapshot_registry.py
+│   ├── rollback_manager.py
+│   ├── fingerprinting.py
+│   └── licensing.py
+├── config/
+│   └── settings.py
+├── utils/
+│   └── logger.py
+└── main.py
+class SentinelCore:
+    def __init__(self):
+        self.logs = []
+        self.alerts = []
 
-class ControlPanelEntity:
-    def __init__(self, core_id):
-        self.module_id = "CPE_v1.0"
-        self.privilege_level = "governor"
-        self.linked_core = core_id
-        self.focus = ["system_integrity", "performance"]
-        self.device_specs = get_device_specs()
-        self.system_map = map_system()
-
-    def evaluate_app(self, app_id, binary_path):
-        synastry = analyze_app_synastry(app_id, self.system_map)
-        simulation_result = simulate_upload(binary_path)
-        fix_result = test_fixes(simulation_result)
-        decision = enforce_policy(synastry, simulation_result, fix_result)
-        return decision
-def analyze_app_synastry(app_id, system_map):
-    dependencies = []
-    for driver, apps in system_map["dependencies"].items():
-        if app_id in apps:
-            dependencies.append(driver)
-    return {
-        "app_id": app_id,
-        "dependencies": dependencies,
-        "synastry_score": round(len(dependencies) / len(system_map["drivers"]), 2)
-    }def map_system():
-    # Placeholder for actual system mapping logic
-    return {
-        "drivers": ["gpu_driver_v2", "storage_driver_v4"],
-        "services": ["network_manager", "sensor_daemon"],
-        "dependencies": {
-            "gpu_driver_v2": ["com.editor.app"],
-            "storage_driver_v4": ["com.backup.app"]
-        }
-    }
-def test_fixes(simulation_result):
-    if simulation_result["cpu_spike"] or simulation_result["latency"] > 20:
-        return {"fix_applied": True, "status": "patched"}
-    return {"fix_applied": False, "status": "clean"}
-import random
-
-def simulate_upload(binary_path):
-    # Simulate performance impact
-    return {
-        "cpu_spike": random.choice([True, False]),
-        "latency": random.randint(5, 30),
-        "memory_usage": random.randint(50, 200)
-    }
-def enforce_policy(synastry, simulation, fix):
-    if fix["status"] == "patched" and synastry["synastry_score"] < 0.5:
-        return {"decision": "approve_with_patch"}
-    elif fix["status"] == "clean":
-        return {"decision": "approve"}
-    else:
-        return {"decision": "block", "reason": "high impact or poor synastry"}
-from coreidentity.cpe import ControlPanelEntity
-
-cpe = ControlPanelEntity(core_id="CoreIdentity_Agent_001")
-result = cpe.evaluate_app("com.editor.app", "/path/to/editor.apk")
-print(result)class RollbackManager:
-    def __init__(self, db_path="cpe_archive.json"):
-        self.db_path = db_path
-
-    def load_db(self):
-        if not os.path.exists(self.db_path):
-            return []
-        with open(self.db_path, "r") as f:
-            return json.load(f)
-
-    def rollback(self, mode="previous_version"):
-        archive = self.load_db()
-        if not archive:
-            print("No archived configurations available.")
-            return None
-
-        if mode == "previous_version":
-            config = archive[-1]["fingerprints"]
-            print("Rolling back to previous saved version.")
-        elif mode == "original_version":
-            config = archive[0]["fingerprints"]
-            print("Rolling back to original clean slate.")
-        elif mode == "secure_mode":
-            config = self.generate_secure_config(archive[-1]["fingerprints"])
-            print("Rolling back to secure hardened configuration.")
+    def validate_action(self, module, action, metadata):
+        log_entry = f"[{module}] Action: {action} | Metadata: {metadata}"
+        self.logs.append(log_entry)
+        if self._is_anomalous(action, metadata):
+            self.alerts.append(log_entry)
+            print(f"⚠️ ALERT: {log_entry}")
         else:
-            print("Invalid rollback mode.")
-            return None
+            print(f"✅ OK: {log_entry}")
 
-        self.apply_config(config)
-        return config
+    def _is_anomalous(self, action, metadata):
+        return metadata.get("unauthorized", False)
 
-    def generate_secure_config(self, current):
-        secure_config = current.copy()
-        # Example: disable risky modules, enforce strict drivers
-        secure_config["system_map"]["disabled_modules"] = ["telemetry", "third_party_plugins"]
-        secure_config["decision"]["security_mode"] = "hardened"
-        return secure_config
+    def get_logs(self):
+        return self.logs
 
-    def apply_config(self, config):
-        # Placeholder: apply system settings, drivers, app configs
-        print("Applying configuration...")
-        # system.apply(config["system_map"])
-        # drivers.load(config["device_specs"])
-        # governor.enforce(config["decision"])
-from .rollback_manager import RollbackManager
-
-class ControlPanelEntity:
-    def __init__(self, core_id, db_path="cpe_archive.json"):
-        ...
-        self.rollback_manager = RollbackManager(db_path)
-
-    def rollback_system(self, mode="previous_version"):
-        config = self.rollback_manager.rollback(mode)
-        if config:
-            print("Rollback successful.")
-        else:
-            print("Rollback failed or unavailable.")
-cpe.rollback_system(mode="secure_mode")        # Hardened config
-cpe.rollback_system(mode="original_version")   # Clean slate
-cpe.rollback_system(mode="previous_version")   # Last good state
+    def get_alerts(self):
+        return self.alerts
