@@ -1,0 +1,43 @@
+
+class PrivacyInterpreter:
+    def __init__(self, allow_analysis=True, allow_logging=False):
+        self.allow_analysis = allow_analysis
+        self.allow_logging = allow_logging
+
+    def interpret_message(self, message):
+        if not self.allow_analysis:
+            return "🔒 Analysis disabled for privacy."
+        # Example: detect urgency or phishing tone without storing content
+        if "urgent" in message.lower() or "click here" in message.lower():
+            return "⚠️ Potential phishing pattern detected."
+        return "✅ Message appears normal."
+
+    def interpret_media(self, metadata):
+        if not self.allow_analysis:
+            return "🔒 Media analysis disabled."
+        if metadata.get("size_mb", 0) > 100 and metadata.get("type") == "video":
+            return "⚠️ Large video file detected. Possible exfiltration vector."
+        return "✅ Media usage within normal bounds."
+
+    def log_interpretation(self, result):
+        if self.allow_logging:
+            with open("privacy_log.txt", "a") as f:
+                f.write(result + "\n")
+from modules.privacy_interpreter import PrivacyInterpreter
+
+class ControlPanelEntity:
+    def __init__(self):
+        self.sentinel = SentinelCore()
+        self.interpreter = PrivacyInterpreter(allow_analysis=True, allow_logging=False)
+
+    def open_message(self, message):
+        result = self.interpreter.interpret_message(message)
+        print(result)
+        self.sentinel.validate_action("PrivacyInterpreter", "message_scan", {"summary": result})
+def enforce_wifi_identity(profile_id):
+    registry = AccountRegistry()
+    if not registry.is_approved(profile_id):
+        print("❌ Wi-Fi access denied: Unrecognized identity.")
+        return False
+    print("✅ Wi-Fi access granted.")
+    return True
