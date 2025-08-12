@@ -1,0 +1,31 @@
+/coreidentity/
+├── cpe/
+│   ├── __init__.py
+│   ├── config.json
+│   ├── device_specs.py
+│   ├── system_mapper.py
+│   ├── synastry_engine.py
+│   ├── upload_simulator.py
+│   ├── fix_tester.py
+│   └── governor.pyfrom .device_specs import get_device_specs
+from .system_mapper import map_system
+from .synastry_engine import analyze_app_synastry
+from .upload_simulator import simulate_upload
+from .fix_tester import test_fixes
+from .governor import enforce_policy
+
+class ControlPanelEntity:
+    def __init__(self, core_id):
+        self.module_id = "CPE_v1.0"
+        self.privilege_level = "governor"
+        self.linked_core = core_id
+        self.focus = ["system_integrity", "performance"]
+        self.device_specs = get_device_specs()
+        self.system_map = map_system()
+
+    def evaluate_app(self, app_id, binary_path):
+        synastry = analyze_app_synastry(app_id, self.system_map)
+        simulation_result = simulate_upload(binary_path)
+        fix_result = test_fixes(simulation_result)
+        decision = enforce_policy(synastry, simulation_result, fix_result)
+        return decision
