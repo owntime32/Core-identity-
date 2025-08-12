@@ -598,3 +598,17 @@ class ConfigOptimizer:
     def suggest(self, metrics):
         best = min(self.configs, key=lambda c: self.score(c, metrics))
         return best if best != self.current else None
+from core.sentinel_core import SentinelCore
+from modules.privacy_interpreter import PrivacyInterpreter
+from core_identity.core_identity_ai import CoreIdentityAI
+from core_identity_bridge import CoreIdentityBridge
+
+core_ai = CoreIdentityAI()
+sentinel = SentinelCore()
+interpreter = PrivacyInterpreter()
+
+bridge = CoreIdentityBridge(core_ai, sentinel, interpreter)
+
+# Simulate real-world loop
+result = bridge.exchange_insight("User opened new app", "Message: urgent update available")
+print(result)
