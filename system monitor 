@@ -252,3 +252,99 @@ def _is_suspicious(self, fingerprint):
     if not registry.is_approved(profile_id):
         return True
     ...
+from core.sentinel_core import SentinelCore
+from core.core_identity_ai import CoreIdentityAI
+from modules.privacy_interpreter import PrivacyInterpreter
+from core.core_identity_bridge import CoreIdentityBridge
+
+if __name__ == "__main__":
+    core_ai = CoreIdentityAI()
+    sentinel = SentinelCore()
+    interpreter = PrivacyInterpreter()
+
+    bridge = CoreIdentityBridge(core_ai, sentinel, interpreter)
+
+    # Simulate real-world loop
+    result = bridge.exchange_insight("User opened new app", "Message: urgent override detected")
+    print(result)
+from core_identity_governor import CoreIdentityGovernor
+
+class CoreIdentityBridge:
+    def __init__(self, core_identity, sentinel_core, privacy_interpreter):
+        self.core_identity = core_identity
+        self.sentinel = sentinel_core
+        self.interpreter = privacy_interpreter
+        self.governor = CoreIdentityGovernor()
+
+    def exchange_insight(self, user_event, system_event):
+        user_summary = self.core_identity.interpret_user_event(user_event)
+        system_summary = self.interpreter.interpret_message(system_event)
+
+        # Validate interpretations
+        user_check = self.governor.validate_interpretation(user_summary)
+        system_check = self.governor.validate_interpretation(system_summary)
+
+        if user_check["status"] == "blocked" or system_check["status"] == "blocked":
+            self.sentinel.validate_action("CoreIdentityBridge", "blocked_interpretation", {
+                "user_summary": user_summary,
+                "system_summary": system_summary,
+                "reason": user_check.get("reason") or system_check.get("reason")
+            })
+            return {"status": "blocked", "reason": user_check.get("reason") or system_check.get("reason")}
+
+        # Validate action
+        action_check = self.governor.validate_action("exchange")
+        if action_check["status"] == "blocked":
+            return {"status": "blocked", "reason": action_check["reason"]}
+
+        self.sentinel.validate_action("CoreIdentityBridge", "exchange", {
+            "user_summary": user_summary,
+            "system_summary": system_summary
+        })
+
+        return {
+            "status": "approved",
+            "user_insight": user_summary,
+            "system_insight": system_summary
+        }
+from core.core_identity_governor import CoreIdentityGovernor
+
+class CoreIdentityBridge:
+    def __init__(self, core_identity, sentinel_core, privacy_interpreter):
+        self.core_identity = core_identity
+        self.sentinel = sentinel_core
+        self.interpreter = privacy_interpreter
+        self.governor = CoreIdentityGovernor()
+
+    def exchange_insight(self, user_event, system_event):
+        user_summary = self.core_identity.interpret_user_event(user_event)
+        system_summary = self.interpreter.interpret_message(system_event)
+
+        user_check = self.governor.validate_interpretation(user_summary)
+        system_check = self.governor.validate_interpretation(system_summary)
+
+        if user_check["status"] == "blocked" or system_check["status"] == "blocked":
+            self.sentinel.validate_action("CoreIdentityBridge", "blocked_interpretation", {
+                "user_summary": user_summary,
+                "system_summary": system_summary,
+                "reason": user_check.get("reason") or system_check.get("reason")
+            })
+            return {"status": "blocked", "reason": user_check.get("reason") or system_check.get("reason")}
+
+        action_check = self.governor.validate_action("exchange")
+        if action_check["status"] == "blocked":
+            return {"status": "blocked", "reason": action_check["reason"]}
+
+        self.sentinel.validate_action("CoreIdentityBridge", "exchange", {
+            "user_summary": user_summary,
+            "system_summary": system_summary
+        })
+
+        return {
+            "status": "approved",
+            "user_insight": user_summary,
+            "system_insight": system_summary
+        }
+result = bridge.exchange_insight("User opened new app", "Message: urgent override detected")
+print(result)
+# Output: Blocked due to unsafe phrase "override"
