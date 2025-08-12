@@ -36,3 +36,88 @@ class SentinelCore:
 
     def get_alerts(self):
         return self.alerts
+import os
+
+class MediaAccessManager:
+    def __init__(self, media_type):
+        self.media_type = media_type
+
+    def open_media(self, file_path):
+        ext = os.path.splitext(file_path)[-1].lower()
+        if self.media_type == "picture" and ext in [".jpg", ".png"]:
+            return self._view_only(file_path)
+        elif self.media_type == "document" and ext in [".pdf", ".docx"]:
+            return self._read_only(file_path)
+        elif self.media_type == "video" and ext in [".mp4", ".mov"]:
+            return self._playback_only(file_path)
+        else:
+            return "❌ Unsupported or unauthorized media type."
+
+    def _view_only(self, path):
+        print(f"📷 Viewing picture: {path}")
+        return path
+
+    def _read_only(self, path):
+        print(f"📄 Reading document: {path}")
+        return path
+
+    def _playback_only(self, path):
+        print(f"🎥 Playing video: {path}")
+        return path
+from core.sentinel_core import SentinelCore
+from modules.media_access_manager import MediaAccessManager
+
+class ControlPanelEntity:
+    def __init__(self):
+        self.sentinel = SentinelCore()
+
+    def open_media(self, file_path, media_type):
+        manager = MediaAccessManager(media_type)
+        result = manager.open_media(file_path)
+        self.sentinel.validate_action("MediaAccess", "open", {"file": file_path, "type": media_type})
+        return result
+from control_panel.control_panel_entity import ControlPanelEntity
+import os
+
+class MediaAccessManager:
+    def __init__(self, media_type):
+        self.media_type = media_type
+
+    def open_media(self, file_path):
+        ext = os.path.splitext(file_path)[-1].lower()
+        if self.media_type == "picture" and ext in [".jpg", ".png"]:
+            return self._view_only(file_path)
+        elif self.media_type == "document" and ext in [".pdf", ".docx"]:
+            return self._read_only(file_path)
+        elif self.media_type == "video" and ext in [".mp4", ".mov"]:
+            return self._playback_only(file_path)
+        else:
+            return "❌ Unsupported or unauthorized media type."
+
+    def _view_only(self, path):
+        print(f"📷 Viewing picture: {path}")
+        return path
+
+    def _read_only(self, path):
+        print(f"📄 Reading document: {path}")
+        return path
+
+    def _playback_only(self, path):
+        print(f"🎥 Playing video: {path}")
+        return path
+if __name__ == "__main__":
+    cpe = ControlPanelEntity()
+    cpe.open_media("assets/photo.jpg", "picture")
+    cpe.open_media("docs/report.pdf", "document")
+    cpe.open_media("videos/demo.mp4", "video")
+def log(message):
+    print(f"[LOG] {message}")
+def log(message):
+    print(f"[LOG] {message}")
+from control_panel.control_panel_entity import ControlPanelEntity
+
+if __name__ == "__main__":
+    cpe = ControlPanelEntity()
+    cpe.open_media("assets/photo.jpg", "picture")
+    cpe.open_media("docs/report.pdf", "document")
+    cpe.open_media("videos/demo.mp4", "video")
