@@ -121,3 +121,73 @@ if __name__ == "__main__":
     cpe.open_media("assets/photo.jpg", "picture")
     cpe.open_media("docs/report.pdf", "document")
     cpe.open_media("videos/demo.mp4", "video")
+import hashlib
+import time
+import socket
+import psutil
+
+class SurfaceBoundaryMonitor:
+    def __init__(self, sentinel_core):
+        self.sentinel = sentinel_core
+        self.transmission_log = []
+
+    def scan_transmissions(self):
+        connections = psutil.net_connections(kind='inet')
+        for conn in connections:
+            if conn.status == 'ESTABLISHED':
+                fingerprint = self._fingerprint_connection(conn)
+                self.transmission_log.append(fingerprint)
+                self._validate_transmission(fingerprint)
+
+    def _fingerprint_connection(self, conn):
+        try:
+            pid = conn.pid
+            proc = psutil.Process(pid)
+            app_name = proc.name()
+            remote_ip = conn.raddr.ip if conn.raddr else "unknown"
+            remote_port = conn.raddr.port if conn.raddr else "unknown"
+            timestamp = int(time.time())
+            payload = f"{app_name}-{remote_ip}-{remote_port}-{timestamp}"
+            hash_id = hashlib.sha256(payload.encode()).hexdigest()
+            return {
+                "app": app_name,
+                "remote_ip": remote_ip,
+                "remote_port": remote_port,
+                "timestamp": timestamp,
+                "fingerprint": hash_id
+            }
+        except Exception as e:
+            return {"error": str(e)}
+
+    def _validate_transmission(self, fingerprint):
+        suspicious = self._is_suspicious(fingerprint)
+        metadata = {
+            "app": fingerprint.get("app"),
+            "remote_ip": fingerprint.get("remote_ip"),
+            "unauthorized": suspicious
+        }
+        self.sentinel.validate_action("SurfaceBoundary", "transmission", metadata)
+
+    def _is_suspicious(self, fingerprint):
+        # Example logic: block unknown IPs or known leak patterns
+        suspicious_ips = ["185.62.189.1", "103.21.244.0"]
+        if fingerprint["remote_ip"] in suspicious_ips:
+            return True
+        if fingerprint["app"] not in self._trusted_apps():
+            return True
+        return False
+
+    def _trusted_apps(self):
+        return ["system_server", "coreidentity", "control_panel", "vpn_service"]
+from modules.surface_boundary_monitor import SurfaceBoundaryMonitor
+
+class ControlPanelEntity:
+    def __init__(self):
+        self.sentinel = SentinelCore()
+        self.surface_monitor = SurfaceBoundaryMonitor(self.sentinel)
+
+    def run_surface_scan(self):
+        print("🧠 Running surface boundary scan...")
+        self.surface_monitor.scan_transmissions()
+cpe = ControlPanelEntity()
+cpe.run_surface_scan()
