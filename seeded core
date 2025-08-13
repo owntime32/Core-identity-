@@ -895,3 +895,46 @@ def link(nodeA, nodeB):
     assert nodeB.verify(confirmA) and nodeA.verify(confirmB)
 
     return SecureChannel(key=K, transcript=transcript)
+import sqlite3
+
+class MetaDBServer:
+    def __init__(self, sB: bytes, db_path="metadata.db"):
+        self.sB = sB
+        self.conn = sqlite3.connect(db_path)
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT)"
+        )
+        self.conn.commit()
+
+class MetaDataService:
+    def __init__(self, server: MetaDBServer):
+        self.server = server
+
+    def handle_packet(self, packet, chan_server):
+        try:
+            req = chan_server.unprotect(packet)
+        except Exception:
+            return {"status": "error", "error": "auth_failed"}
+
+        op = req.get("op")
+        if op == "put":
+            self.server.conn.execute(
+                "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)",
+                (req["key"], req["value"])
+            )
+            self.server.conn.commit()
+            return {"status": "ok"}
+        elif op == "get":
+            cur = self.server.conn.execute(
+                "SELECT value FROM metadata WHERE key=?",
+                (req["key"],)
+            )
+            row = cur.fetchone()
+            return {"status": "ok", "value": row[0] if row else None}
+        else:
+            return {"status": "error", "error": "unknown_op"}
+self.db = {}
+CREATE TABLE metadata (
+    key TEXT PRIMARY KEY,
+    value TEXT
+);
