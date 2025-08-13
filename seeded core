@@ -686,3 +686,193 @@ class CoreIdentityBridge:
             "user_insight": user_summary,
             "system_insight": system_summary
         }
+import os, json, secrets, base64
+from dataclasses import dataclass
+from typing import Tuple, Dict, Any
+
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from cryptography.hazmat.primitives import hashes, hmac, serialization
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+
+# === Crypto utilities ===
+
+def sha256(data: bytes) -> bytes:
+    digest = hashes.Hash(hashes.SHA256())
+    digest.update(data)
+    return digest.finalize()
+
+def hkdf(ikm: bytes, salt: bytes = b"", info: bytes = b"", length: int = 32) -> bytes:
+    return HKDF(algorithm=hashes.SHA256(), length=length, salt=salt or None, info=info).derive(ikm)
+
+def hmac_tag(key: bytes, data: bytes) -> bytes:
+    h = hmac.HMAC(key, hashes.SHA256())
+    h.update(data)
+    return h.finalize()
+
+def aead_encrypt(key: bytes, plaintext: bytes, aad: bytes = b"") -> Tuple[bytes, bytes]:
+    aead = AESGCM(key)
+    nonce = os.urandom(12)
+    ct = aead.encrypt(nonce, plaintext, aad)
+    return nonce, ct
+
+def aead_decrypt(key: bytes, nonce: bytes, ct: bytes, aad: bytes = b"") -> bytes:
+    aead = AESGCM(key)
+    return aead.decrypt(nonce, ct, aad)
+
+
+# === Link primitives ===
+
+@dataclass
+class Ephemeral:
+    priv: X25519PrivateKey
+    pub: X25519PublicKey
+    pub_bytes: bytes
+
+    @staticmethod
+    def generate():
+        priv = X25519PrivateKey.generate()
+        pub = priv.public_key()
+        pub_bytes = pub.public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw
+        )
+        return Ephemeral(priv, pub, pub_bytes)
+
+@dataclass
+class SecureChannel:
+    key: bytes
+    transcript_hash: bytes
+    role: str  # "client" or "server"
+
+    def protect(self, message: Dict[str, Any]) -> Dict[str, Any]:
+        aad = self.transcript_hash
+        pt = json.dumps(message).encode("utf-8")
+        nonce, ct = aead_encrypt(self.key, pt, aad=aad)
+        return {
+            "aad": base64.b64encode(aad).decode(),
+            "nonce": base64.b64encode(nonce).decode(),
+            "ct": base64.b64encode(ct).decode(),
+        }
+
+    def unprotect(self, packet: Dict[str, Any]) -> Dict[str, Any]:
+        aad = base64.b64decode(packet["aad"])
+        nonce = base64.b64decode(packet["nonce"])
+        ct = base64.b64decode(packet["ct"])
+        pt = aead_decrypt(self.key, nonce, ct, aad=aad)
+        return json.loads(pt.decode("utf-8"))
+
+# Each side’s “half” is a secret byte-string; only a transcript-bound HMAC leaves the boundary.
+@dataclass
+class NodeClient:
+    sA: bytes  # client half
+
+@dataclass
+class MetaDBServer:
+    sB: bytes  # server half
+    db: Dict[str, str]
+
+    def __init__(self, sB: bytes):
+        self.sB = sB
+        self.db = {}
+
+# Handshake that requires both halves; returns (client_channel, server_channel)
+def establish_link(client: NodeClient, server: MetaDBServer) -> Tuple[SecureChannel, SecureChannel]:
+    # 1) Ephemeral ECDH on both sides
+    ephA = Ephemeral.generate()
+    ephB = Ephemeral.generate()
+
+    # Publics are "exchanged"; in a real network these cross the wire
+    a_pub = ephA.pub_bytes
+    b_pub = ephB.pub_bytes
+
+    # 2) Compute shared secret and transcript hash
+    z_client = ephA.priv.exchange(X25519PublicKey.from_public_bytes(b_pub))
+    z_server = ephB.priv.exchange(X25519PublicKey.from_public_bytes(a_pub))
+    assert z_client == z_server
+    z = z_client
+    transcript = b"LINK-1" + a_pub + b_pub
+    th = sha256(transcript)
+
+    # 3) Each side proves knowledge of its half via transcript-bound HMAC
+    pA = hmac_tag(client.sA, th + b"|A")
+    pB = hmac_tag(server.sB, th + b"|B")
+
+    # 4) Derive final session key from z || pA || pB
+    ikm = z + pA + pB
+    K = hkdf(ikm, info=sha256(b"CONF-" + th))
+
+    # 5) Key confirmation (both sides should compute the same tags)
+    kcA = hmac_tag(K, b"KC-A" + th)
+    kcB = hmac_tag(K, b"KC-B" + th)
+    # Simulate exchange and verify
+    assert kcA == hmac_tag(K, b"KC-A" + th)
+    assert kcB == hmac_tag(K, b"KC-B" + th)
+
+    chan_client = SecureChannel(key=K, transcript_hash=th, role="client")
+    chan_server = SecureChannel(key=K, transcript_hash=th, role="server")
+    return chan_client, chan_server
+
+
+# === Metadata service that only accepts AEAD-protected requests under K ===
+
+class MetaDataService:
+    def __init__(self, server: MetaDBServer):
+        self.server = server
+
+    def handle_packet(self, packet: Dict[str, Any], chan_server: SecureChannel) -> Dict[str, Any]:
+        try:
+            req = chan_server.unprotect(packet)
+        except Exception as e:
+            return {"status": "error", "error": "auth_failed"}
+
+        op = req.get("op")
+        if op == "put":
+            key = req["key"]; val = req["value"]
+            self.server.db[key] = val
+            return {"status": "ok"}
+        elif op == "get":
+            key = req["key"]
+            val = self.server.db.get(key)
+            return {"status": "ok", "value": val}
+        else:
+            return {"status": "error", "error": "unknown_op"}
+
+
+# === Demo ===
+
+def main():
+    # Provision halves (keep them high-entropy and secret)
+    sA = secrets.token_bytes(32)  # client half
+    sB = secrets.token_bytes(32)  # server half
+
+    client = NodeClient(sA=sA)
+    server = MetaDBServer(sB=sB)
+    service = MetaDataService(server)
+
+    # Establish the link (both halves required)
+    chan_client, chan_server = establish_link(client, server)
+
+    print("Link established. Session key (base64):", base64.b64encode(chan_client.key).decode())
+
+    # Client sends a protected 'put' request
+    pkt_put = chan_client.protect({"op": "put", "key": "device:123", "value": "online"})
+    resp_put = service.handle_packet(pkt_put, chan_server)
+    print("PUT response:", resp_put)
+
+    # Client sends a protected 'get' request
+    pkt_get = chan_client.protect({"op": "get", "key": "device:123"})
+    resp_get = service.handle_packet(pkt_get, chan_server)
+    print("GET response:", resp_get)
+
+    # Attack simulation: wrong key (no link)
+    fake_key = secrets.token_bytes(32)
+    fake_channel = SecureChannel(key=fake_key, transcript_hash=chan_client.transcript_hash, role="client")
+    pkt_bad = fake_channel.protect({"op": "get", "key": "device:123"})
+    resp_bad = service.handle_packet(pkt_bad, chan_server)
+    print("Unauthorized request response:", resp_bad)
+
+
+if __name__ == "__main__":
+    main()
