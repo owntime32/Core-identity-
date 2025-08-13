@@ -876,3 +876,22 @@ def main():
 
 if __name__ == "__main__":
     main()
+# Pseudocode: sketch only; use audited libs and proper error handling.
+
+def link(nodeA, nodeB):
+    # 1) AKE -> z, transcript
+    z, transcript = noise_xx_handshake(nodeA.id_key, nodeB.pub_id_key)
+
+    # 2) Half-proofs inside the encrypted tunnel
+    pA = opaque_client_prove(secret=nodeA.sA, peer=nodeB, transcript=transcript)
+    pB = opaque_server_verify(peer_secret=nodeB.sB, client=nodeA, transcript=transcript)
+
+    # 3) Final key derivation
+    K = hkdf(input_key_material=concat(z, pA, pB), info=hash(transcript))
+
+    # 4) Key confirmation
+    confirmA = hmac(K, b"KC-A" + hash(transcript))
+    confirmB = hmac(K, b"KC-B" + hash(transcript))
+    assert nodeB.verify(confirmA) and nodeA.verify(confirmB)
+
+    return SecureChannel(key=K, transcript=transcript)
