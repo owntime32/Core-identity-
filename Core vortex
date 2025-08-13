@@ -1,0 +1,411 @@
+import uuid
+import random
+import hashlib
+from typing import List, Dict, Optional
+
+
+=========================
+
+Secure Key-to-Key System
+
+=========================
+class SecureLink:
+    def init(self):
+        self.keys = {}
+
+    def generatekey(self, nodeid: str):
+        key = hashlib.sha256(f"{node_id}-{uuid.uuid4()}".encode()).hexdigest()
+        self.keys[node_id] = key
+        return key
+
+    def authenticate(self, senderid: str, receiverid: str):
+        return self.keys.get(senderid) and self.keys.get(receiverid)
+
+
+=========================
+
+Base Heritage Node
+
+=========================
+class HeritageNode:
+    def init(self, name: str, parent_id: Optional[str] = None):
+        self.name = name
+        self.id = str(uuid.uuid4())
+        self.parentid = parentid
+        self.task_log: List[Dict] = []
+        self.tile_tag = f"TILE-{random.randint(1000, 9999)}"
+
+    def logtask(self, taskdata: Dict):
+        task_id = str(uuid.uuid4())
+        task_data.update({
+            "taskid": taskid,
+            "tiletag": self.tiletag,
+            "parentid": self.parentid
+        })
+        self.tasklog.append(taskdata)
+        return task_id
+
+
+=========================
+
+Agent Program
+
+=========================
+class AgentProgram(HeritageNode):
+    def executetask(self, taskinput: Dict):
+        result = {
+            "input": task_input,
+            "output": f"Processed by {self.name}",
+            "performance": random.uniform(0.75, 0.99),
+            "debug": f"No critical errors in {self.name}"
+        }
+        self.log_task(result)
+        return result
+
+
+=========================
+
+API Program
+
+=========================
+class APIProgram(HeritageNode):
+    def init(self, name: str, parent_id: str):
+        super().init(name, parent_id)
+        self.agents: List[AgentProgram] = []
+
+    def add_agent(self, agent: AgentProgram):
+        self.agents.append(agent)
+
+    def runagents(self, taskinput: Dict):
+        results = [agent.executetask(taskinput) for agent in self.agents]
+        self.logtask({"agentresults": results})
+        return results
+
+
+=========================
+
+Core System
+
+=========================
+class CoreSystem(HeritageNode):
+    def init(self, name: str):
+        super().init(name)
+        self.apis: List[APIProgram] = []
+
+    def add_api(self, api: APIProgram):
+        self.apis.append(api)
+
+    def processtask(self, taskinput: Dict):
+        results = [api.runagents(taskinput) for api in self.apis]
+        self.logtask({"coreresults": results})
+        return results
+
+
+=========================
+
+Open Node (Secure Portal)
+
+=========================
+class OpenNode:
+    def init(self, linksystem: SecureLink, corea: CoreSystem, core_b: CoreSystem):
+        self.linksystem = linksystem
+        self.corea = corea
+        self.coreb = coreb
+        self.keya = linksystem.generatekey(corea.id)
+        self.keyb = linksystem.generatekey(coreb.id)
+
+    def transfertask(self, fromcore: CoreSystem, tocore: CoreSystem, taskinput: Dict):
+        if self.linksystem.authenticate(fromcore.id, to_core.id):
+            return tocore.processtask(task_input)
+        else:
+            return {"error": "Key authentication failed"}
+
+
+=========================
+
+Admin Orchestrator (Vortex Loop)
+
+=========================
+class AdminOrchestrator:
+    def init(self, name: str):
+        self.name = name
+        self.id = str(uuid.uuid4())
+        self.secure_link = SecureLink()
+        self.corea = CoreSystem("CoreA")
+        self.coreb = CoreSystem("CoreB")
+        self.opennode = OpenNode(self.securelink, self.corea, self.coreb)
+        self.learning_memory: List[Dict] = []
+        self.keyadmin = self.securelink.generate_key(self.id)
+
+    def addapitocore(self, core: CoreSystem, numapis: int, agentsperapi: int):
+        for i in range(num_apis):
+            api = APIProgram(f"{core.name}API{i+1}", parent_id=core.id)
+            for j in range(agentsperapi):
+                api.addagent(AgentProgram(f"{api.name}Agent{j+1}", parentid=api.id))
+            core.add_api(api)
+
+    def vortexlearningloop(self, iterations: int):
+        for i in range(iterations):
+            task = {"iteration": i+1, "data": f"Loop data {i+1}"}
+            
+            # Step 1: Admin sends to Core A
+            resultsa = self.corea.process_task(task)
+            
+            # Step 2: Open Node sends results to Core B
+            resultsb = self.opennode.transfertask(self.corea, self.coreb, {"froma": results_a})
+            
+            # Step 3: Admin learns from both
+            learning_entry = {
+                "iter": i+1,
+                "corea": resultsa,
+                "coreb": resultsb
+            }
+            self.learningmemory.append(learningentry)
+            
+            print(f"[Vortex] Iteration {i+1} complete — learning from both cores")
+
+    def showlearninghistory(self):
+        return self.learning_memory
+
+
+=========================
+
+Example Run
+
+=========================
+if name == "main":
+    admin = AdminOrchestrator("Main_Admin")
+    admin.addapitocore(admin.corea, numapis=3, agentsper_api=2)
+    admin.addapitocore(admin.coreb, numapis=3, agentsper_api=2)
+    
+    admin.vortexlearningloop(iterations=3)
+    print("\n=== Learning History ===")
+    for entry in admin.showlearninghistory():
+        print(entry)
+import random
+import uuid
+
+---- Agent Class ----
+class Agent:
+    def init(self, name, specialization):
+        self.name = name
+        self.specialization = specialization
+
+    def execute_task(self, directive):
+        return f"{self.name} ({self.specialization}) processed directive: {directive}"
+
+---- Blockchain API Class ----
+class BlockchainAPI:
+    def init(self, api_id, specialization):
+        self.apiid = apiid
+        self.specialization = specialization
+        self.chain_log = []
+        self.agents = []
+
+    def add_agent(self, agent):
+        self.agents.append(agent)
+
+    def process_directive(self, directive):
+        api_results = []
+        for agent in self.agents:
+            result = agent.execute_task(directive)
+            self.chainlog.append({"taskid": str(uuid.uuid4()), "result": result})
+            api_results.append(result)
+        return api_results
+
+---- Core System Class ----
+class CoreSystem:
+    def init(self, core_name):
+        self.corename = corename
+        self.apis = []
+
+    def add_api(self, api):
+        self.apis.append(api)
+
+    def process(self, directive):
+        all_results = []
+        for api in self.apis:
+            results = api.process_directive(directive)
+            all_results.extend(results)
+        return all_results
+
+---- Admin Orchestrator Class ----
+class AdminOrchestrator:
+    def init(self):
+        self.cores = []
+        self.key = "SYSTEMKEY" + str(uuid.uuid4())
+
+    def add_core(self, core):
+        self.cores.append(core)
+
+    def open_pathway(self):
+        print(f"[OPEN PATHWAY] Enabled between cores using key: {self.key}")
+
+    def run_directive(self, directive):
+        self.open_pathway()
+        all_results = {}
+        for core in self.cores:
+            core_results = core.process(directive)
+            allresults[core.corename] = core_results
+        return all_results
+
+---- Setup Simulation ----
+def setup_system():
+    orchestrator = AdminOrchestrator()
+
+    for corename in ["CoreA", "Core_B"]:
+        core = CoreSystem(core_name)
+        for i in range(1, 6):
+            api = BlockchainAPI(f"{corename}API{i}", specialization=f"Specialization{i}")
+            for j in range(1, 4):  # 3 agents per API
+                api.addagent(Agent(f"{api.apiid}Agent{j}", f"Algo_{j}"))
+            core.add_api(api)
+        orchestrator.add_core(core)
+
+    return orchestrator
+
+if name == "main":
+    orchestrator = setup_system()
+    results = orchestrator.run_directive("Search and analyze patterns in quantum physics data")
+    for core, core_results in results.items():
+        print(f"\n--- {core} RESULTS ---")
+        for res in core_results:
+            print(res)
+class NeuroVortexEngine:
+    def __init__(self, cores: List[CoreSystem], memory_bank: List[Dict]):
+        self.cores = cores
+        self.memory_bank = memory_bank
+        self.vortex_id = str(uuid.uuid4())
+
+    def pulse(self, directive: Dict):
+        iteration_memory = {"vortex_id": self.vortex_id, "directive": directive, "results": []}
+        for core in self.cores:
+            result = core.process_task(directive)
+            iteration_memory["results"].append({core.name: result})
+        self.memory_bank.append(iteration_memory)
+        return iteration_memory
+
+    def evolve(self):
+        # Analyze memory bank, adjust agent weights or spawn new APIs
+        passimport random
+import uuid
+
+# ---- Agent Class ----
+class Agent:
+    def __init__(self, name, specialization):
+        self.name = name
+        self.specialization = specialization
+
+    def execute_task(self, directive):
+        return f"{self.name} ({self.specialization}) processed directive: {directive}"
+
+# ---- Blockchain API Class ----
+class BlockchainAPI:
+    def __init__(self, api_id, specialization):
+        self.api_id = api_id
+        self.specialization = specialization
+        self.chain_log = []
+        self.agents = []
+
+    def add_agent(self, agent):
+        self.agents.append(agent)
+
+    def process_directive(self, directive):
+        api_results = []
+        for agent in self.agents:
+            result = agent.execute_task(directive)
+            self.chain_log.append({"task_id": str(uuid.uuid4()), "result": result})
+            api_results.append(result)
+        return api_results
+
+# ---- Core System Class ----
+class CoreSystem:
+    def __init__(self, core_name):
+        self.core_name = core_name
+        self.apis = []
+
+    def add_api(self, api):
+        self.apis.append(api)
+
+    def process(self, directive):
+        all_results = []
+        for api in self.apis:
+            results = api.process_directive(directive)
+            all_results.extend(results)
+        return all_results
+
+# ---- Admin Orchestrator Class ----
+class AdminOrchestrator:
+    def __init__(self):
+        self.cores = []
+        self.key = "SYSTEM_KEY_" + str(uuid.uuid4())
+
+    def add_core(self, core):
+        self.cores.append(core)
+
+    def open_pathway(self):
+        print(f"[OPEN PATHWAY] Enabled between cores using key: {self.key}")
+
+    def run_directive(self, directive):
+        self.open_pathway()
+        all_results = {}
+        for core in self.cores:
+            core_results = core.process(directive)
+            all_results[core.core_name] = core_results
+        return all_results
+
+# ---- Setup Simulation ----
+def setup_system():
+    orchestrator = AdminOrchestrator()
+
+    for core_name in ["Core_A", "Core_B"]:
+        core = CoreSystem(core_name)
+        for i in range(1, 6):
+            api = BlockchainAPI(f"{core_name}_API_{i}", specialization=f"Specialization_{i}")
+            for j in range(1, 4):  # 3 agents per API
+                api.add_agent(Agent(f"{api.api_id}_Agent_{j}", f"Algo_{j}"))
+            core.add_api(api)
+        orchestrator.add_core(core)
+
+    return orchestrator
+
+if __name__ == "__main__":
+    orchestrator = setup_system()
+    results = orchestrator.run_directive("Search and analyze patterns in quantum physics data")
+    for core, core_results in results.items():
+        print(f"\n--- {core} RESULTS ---")
+        for res in core_results:
+            print(res)
+
+class HybridOrchestrator:
+    def __init__(self, sentinel: AdminOrchestrator, blockchain: AdminOrchestrator):
+        self.sentinel = sentinel
+        self.blockchain = blockchain
+        self.memory = []
+
+    def run_comparison(self, directive: str):
+        sentinel_results = self.sentinel.vortex_learning_loop(1)
+Terrin’s Protective License v1.0 (TPL)
+
+Copyright © 2025 terin Lee maxwell 
+
+This license governs the use, distribution, and monetization of the software, code, architecture, or system (“Work”) covered herein. By accessing, copying, modifying, uploading, executing, or distributing the Work, you agree to the following terms:
+
+1. **No Distribution Without Approval**
+   - You may not copy, upload, share, publish, or distribute the Work in any form—physical or digital—without prior written approval from the Licensor (Terrin).
+   - This includes public repositories, commercial platforms, cloud services, and private networks.
+
+2. **No Monetization Without Approval**
+   - You may not sell, license, rent, or otherwise monetize the Work or any derivative thereof without explicit written consent from the Licensor.
+   - This includes SDK packaging, API access, agent deployment, or integration into commercial products.
+
+3. **No Execution Without Approval**
+   - You may not run, compile, or execute the Work in any environment—local, cloud, or embedded—without prior authorization.
+   - Authorized environments must be registered and fingerprinted with the Licensor.
+
+        blockchain_results = self.blockchain.run_directive(directive)
+        self.memory.append({
+            "directive": directive,
+            "sentinel": sentinel_results,
+            "blockchain": blockchain_results
+        })
