@@ -938,3 +938,99 @@ CREATE TABLE metadata (
     key TEXT PRIMARY KEY,
     value TEXT
 );
+import argparse, json
+from .policy import Policy
+from .demo import run_session, run_triple
+
+def build_parser():
+    p = argparse.ArgumentParser(prog="securelink-demo", description="Defensive secure-link demo (allow/sandbox/deny) with diagnostics")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    def add_common(sp):
+        sp.add_argument("--db-path", default="metadata.db", help="SQLite DB path")
+        sp.add_argument("--puts", type=int, default=2, help="Number of PUT ops")
+        sp.add_argument("--gets", type=int, default=2, help="Number of GET ops")
+        sp.add_argument("--value-size", type=int, default=64, help="Value size in bytes (pre-base64)")
+        sp.add_argument("--max-session-bytes", type=int, default=2000, help="Session wire-byte cap (data-plane)")
+        sp.add_argument("--max-payload-bytes", type=int, default=512, help="Per-message payload cap (bytes)")
+        sp.add_argument("--cooldown", type=int, default=10, help="Quarantine cooldown seconds")
+
+    benign = sub.add_parser("benign", help="Allowed flow to live DB")
+    add_common(benign)
+
+    sandbox = sub.add_parser("sandbox", help="Sandboxed flow to blackhole")
+    add_common(sandbox)
+
+    deny = sub.add_parser("deny", help="Denied in handshake")
+    add_common(deny)
+
+    allp = sub.add_parser("all", help="Run benign, sandbox, then quarantined attempt")
+    allp.add_argument("--db-path", default="metadata.db")
+    allp.add_argument("--max-session-bytes", type=int, default=2000)
+    allp.add_argument("--max-payload-bytes", type=int, default=512)
+    allp.add_argument("--cooldown", type=int, default=10)
+
+    return p
+
+def make_policy(args) -> Policy:
+    return Policy(
+        max_session_bytes=args.max_session_bytes,
+        max_payload_bytes=args.max_payload_bytes,
+        cooldown_seconds=args.cooldown,
+        allowed_key_regex=r"^(SAFE|ALLOW|BENIGN)-",
+        sandbox_key_regex=r"(SUSPECT|BAD|AGENT-X)",
+        deny_key_regex=r"(NUKE|ROOT|GODMODE)",
+        alerts_enabled=True
+    )
+
+def main():
+    p = build_parser()
+    args = p.parse_args()
+
+    if args.cmd == "all":
+        policy = Policy(
+            max_session_bytes=args.max_session_bytes,
+            max_payload_bytes=args.max_payload_bytes,
+            cooldown_seconds=args.cooldown,
+            alerts_enabled=True
+        )
+        report = run_triple(policy, args.db_path)
+        print(json.dumps(report, indent=2))
+        return
+
+    policy = make_policy(args)
+
+    if args.cmd == "benign":
+        report = run_session(
+            agent_id="agent-benign",
+            key_hint="BENIGN-ALPHA-001",
+            puts=args.puts,
+            gets=args.gets,
+            value_size=args.value_size,
+            db_path=args.db_path,
+            policy=policy
+        )
+    elif args.cmd == "sandbox":
+        report = run_session(
+            agent_id="AGENT-X",
+            key_hint="AGENT-X-BAD-PROFILE",
+            puts=args.puts,
+            gets=args.gets,
+            value_size=args.value_size,
+            db_path=args.db_path,
+            policy=policy
+        )
+    elif args.cmd == "deny":
+        report = run_session(
+            agent_id="AGENT-DENY",
+            key_hint="NUKE-UNSAFE-PROFILE",
+            puts=args.puts,
+            gets=args.gets,
+            value_size=args.value_size,
+            db_path=args.db_path,
+            policy=policy
+        )
+    else:
+        p.error("Unknown command")
+
+    print(json.dumps(report, indent=2))
