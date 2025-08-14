@@ -2,7 +2,7 @@ core files
 [Cloud Database]
       ^
       |  (sync/learned libraries, compressed tiles)
-      v
+      core vortex dual seeded core
 [API Module Manager]
       |
       +-- [Tile Loader/Decompressor]   <-- Compressed files: [commands], [tasks], [events]
