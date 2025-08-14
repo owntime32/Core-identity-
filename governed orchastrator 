@@ -1,0 +1,152 @@
+class GovernedOrchestrator(AdminOrchestrator):
+    def __init__(self, name: str):
+        super().__init__(name)
+        
+        # Build dispatcher from environment
+        self.env_adapter = SimpleEnvironmentAdapter(
+            cores_by_id={self.core_a.id: self.core_a, self.core_b.id: self.core_b},
+            open_node=self.open_node
+        )
+        self.dispatcher = self.env_adapter.to_dispatcher()
+        
+        # Initialize KeyManager under governance
+        self.key_manager = KeyManager(dispatcher=self.dispatcher)
+        self.governance_log: List[Dict] = []
+
+    # --- Governance Actions ---
+    def issue_core_key(self, core: CoreSystem, scopes: List[str], ttl: int = 3600):
+        key_id, secret = self.key_manager.issue_key(core.id, scopes, ttl, note=f"{core.name} key")
+        self._log_governance("core_key_issued", {"core": core.name, "key_id": key_id})
+        return key_id, secret
+
+    def revoke_core_key(self, core: CoreSystem):
+        self.key_manager.revoke_key(core.id)
+        self._log_governance("core_key_revoked", {"core": core.name})
+
+    def open_transfer_session(self, scope: str = "transfer", ttl: int = 600):
+        session = self.key_manager.open_session(self.core_a.id, self.core_b.id, scope, ttl)
+        self._log_governance("session_opened", {"scope": scope, "session_id": session["session_id"]})
+        return session
+
+    def register_binding(self, binding_id: str, template, target_selector, scopes: List[str], note: str = ""):
+        self.key_manager.register_binding(binding_id, template, target_selector, scopes, note)
+        self._log_governance("binding_registered", {"binding_id": binding_id, "note": note})
+
+    def bind_hotkey(self, key: str, binding_id: str):
+        self.key_manager.bind_hotkey(key, binding_id)
+        self._log_governance("hotkey_bound", {"key": key, "binding_id": binding_id})
+
+    def trigger_hotkey(self, issuer_id: str, key: str, context: Dict[str, Any]):
+        result = self.key_manager.press_key(issuer_id, key, context)
+        self._log_governance("hotkey_triggered", {"issuer": issuer_id, "key": key})
+        return result
+
+    def _log_governance(self, action: str, data: Dict):
+        self.governance_log.append({
+            "action": action,
+            "timestamp": int(time.time()),
+            "data": data
+        })
+
+    def show_governance_log(self):
+        return self.governance_log
+# Initialize governed orchestrator
+gov_admin = GovernedOrchestrator("Gov_Admin")
+gov_admin.add_api_to_core(gov_admin.core_a, num_apis=2, agents_per_api=2)
+gov_admin.add_api_to_core(gov_admin.core_b, num_apis=2, agents_per_api=2)
+
+# Issue keys
+core_a_key, _ = gov_admin.issue_core_key(gov_admin.core_a, scopes=["process", "transfer"])
+core_b_key, _ = gov_admin.issue_core_key(gov_admin.core_b, scopes=["process", "transfer"])
+
+# Open session
+session = gov_admin.open_transfer_session()
+
+# Register bindings
+def scan_template(ctx): return {"type": "SCAN", "tags": ctx.get("tags", [])}
+def to_core_a(ctx): return {"type": "core", "core_id": gov_admin.core_a.id}
+def a_to_b(ctx): return {
+    "type": "between_cores",
+    "from_core_id": gov_admin.core_a.id,
+    "to_core_id": gov_admin.core_b.id,
+    "session_id": session["session_id"],
+    "token_hash": session["token"]
+}
+
+gov_admin.register_binding("scan_local", scan_template, to_core_a, scopes=["process"], note="Scan on Core A")
+gov_admin.register_binding("sync_transfer", {"type": "SYNC"}, a_to_b, scopes=["transfer"], note="Transfer A→B")
+
+gov_admin.bind_hotkey("F1", "scan_local")
+gov_admin.bind_hotkey("F2", "sync_transfer")
+
+# Trigger hotkeys
+ctx = {"tags": ["security", "fp"]}
+res1 = gov_admin.trigger_hotkey(gov_admin.core_a.id, "F1", ctx)
+res2 = gov_admin.trigger_hotkey(gov_admin.core_a.id, "F2", {})
+
+print("F1 result:", res1)
+print("F2 result:", res2)
+
+# Review governance log
+for entry in gov_admin.show_governance_log():
+    print(entry)
+/TerrinSDK/
+  ├── LICENSE.tpl
+  ├── core_modules/
+  ├── agent_modules/
+  ├── encryption_layer/
+  ├── sandbox_config/
+  ├── mini_ai_control.py
+  └── init.py
+import os
+import threading
+import time
+import hashlib
+import shutil
+
+class MiniAIControl:
+    def __init__(self, sdk_path: str, license_fingerprint: str):
+        self.sdk_path = sdk_path
+        self.license_fingerprint = license_fingerprint
+        self.active = True
+        self.audit_log = []
+
+    def monitor(self):
+        while self.active:
+            time.sleep(2)
+            if not self.verify_license():
+                self.trigger_self_destruct("License fingerprint mismatch")
+            if self.detect_tampering():
+                self.trigger_self_destruct("Tampering detected")
+            # Add more anomaly checks here
+
+    def verify_license(self):
+        try:
+            with open(os.path.join(self.sdk_path, "LICENSE.tpl"), "r") as f:
+                content = f.read()
+            current_fp = hashlib.sha256(content.encode()).hexdigest()
+            return current_fp == self.license_fingerprint
+        except Exception:
+            return False
+
+    def detect_tampering(self):
+        # Placeholder: check for unexpected file changes, unauthorized access, etc.
+        return False
+
+    def trigger_self_destruct(self, reason: str):
+        self.active = False
+        self.audit_log.append({"event": "SELF_DESTRUCT", "reason": reason, "timestamp": time.time()})
+        print(f"[ALERT] Self-destruct triggered: {reason}")
+        try:
+            for root, dirs, files in os.walk(self.sdk_path, topdown=False):
+                for name in files:
+                    os.remove(os.path.join(root, name))
+                for name in dirs:
+                    shutil.rmtree(os.path.join(root, name))
+            print("[SECURE WIPE] SDK contents deleted.")
+        except Exception as e:
+            print(f"[ERROR] Failed to wipe SDK: {e}")
+
+    def start(self):
+        thread = threading.Thread(target=self.monitor, daemon=True)
+        thread.start()
